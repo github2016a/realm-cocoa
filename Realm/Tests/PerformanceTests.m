@@ -178,7 +178,7 @@ static RLMRealm *s_smallRealm, *s_mediumRealm, *s_largeRealm;
 }
 
 - (void)testEnumerateAndMutateAll {
-    RLMRealm *realm = [self getStringObjects:10];
+    RLMRealm *realm = [self getStringObjects:50];
 
     [self measureBlock:^{
         [realm beginWriteTransaction];
