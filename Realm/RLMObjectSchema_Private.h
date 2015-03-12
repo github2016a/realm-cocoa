@@ -21,7 +21,10 @@
 @class RLMRealm;
 
 // RLMObjectSchema private
-@interface RLMObjectSchema ()
+@interface RLMObjectSchema () {
+    @public
+    NSMutableDictionary *_observers;
+}
 
 // writable redecleration
 @property (nonatomic, readwrite, copy) NSArray *properties;

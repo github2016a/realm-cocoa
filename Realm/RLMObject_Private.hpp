@@ -28,3 +28,6 @@
 }
 
 @end
+
+void RLMWillChange(RLMObservationInfo *info, NSString *key);
+void RLMDidChange(RLMObservationInfo *info, NSString *key, id value);

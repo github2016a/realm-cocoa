@@ -18,7 +18,23 @@
 
 #import "RLMTestCase.h"
 
-#if !DEBUG
+@interface IndexedStringObject : RLMObject
+@property NSString *stringCol;
+@end
+
+@implementation IndexedStringObject
++ (NSArray *)indexedProperties
+{
+    return @[@"stringCol"];
+}
+@end
+
+
+@interface NonRLMIntObject : NSObject
+@property (nonatomic) int intCol;
+@end
+@implementation NonRLMIntObject
+@end
 
 @interface PerformanceTests : RLMTestCase
 @end
@@ -471,6 +487,38 @@ static RLMRealm *s_smallRealm, *s_mediumRealm, *s_largeRealm;
     }];
 }
 
-@end
+- (void)testRealmKVO {
+    RLMRealm *realm = RLMRealm.defaultRealm;
+    [realm beginWriteTransaction];
 
-#endif
+    IntObject *obj1 = [IntObject createInDefaultRealmWithObject:@[@5]];
+    IntObject *obj2 = [IntObject allObjects].firstObject;
+
+    [obj2 addObserver:self forKeyPath:@"intCol" options:0 context:0];
+
+    [self measureBlock:^{
+        for (int i = 0; i < 1000; ++i)
+            obj1.intCol = 10;
+    }];
+
+    [realm commitWriteTransaction];
+    [obj2 removeObserver:self forKeyPath:@"intCol"];
+}
+
+- (void)testNativeKVO {
+    NonRLMIntObject *obj = [NonRLMIntObject new];
+
+    [obj addObserver:self forKeyPath:@"intCol" options:0 context:0];
+
+    [self measureBlock:^{
+        for (int i = 0; i < 1000; ++i)
+            obj.intCol = 10;
+    }];
+
+    [obj removeObserver:self forKeyPath:@"intCol"];
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
+}
+
+@end

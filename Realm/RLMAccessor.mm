@@ -381,35 +381,38 @@ static IMP RLMAccessorGetter(RLMProperty *prop, char accessorCode, NSString *obj
 }
 
 template<typename ArgType, typename StorageType=ArgType>
-static IMP RLMMakeSetter(NSUInteger colIndex, bool isPrimary) {
-    if (isPrimary) {
+static IMP RLMMakeSetter(RLMProperty *prop) {
+    NSUInteger colIndex = prop.column;
+    NSString *name = prop.name;
+    if (prop.isPrimary) {
         return imp_implementationWithBlock(^(__unused RLMObjectBase *obj, __unused ArgType val) {
             @throw RLMException(@"Primary key can't be changed after an object is inserted.");
         });
     }
     return imp_implementationWithBlock(^(__unsafe_unretained RLMObjectBase *const obj, ArgType val) {
+        [obj willChangeValueForKey:name];
         RLMSetValue(obj, colIndex, static_cast<StorageType>(val));
+        [obj didChangeValueForKey:name];
     });
 }
 
 // dynamic setter with column closure
 static IMP RLMAccessorSetter(RLMProperty *prop, char accessorCode) {
-    NSUInteger colIndex = prop.column;
     switch (accessorCode) {
-        case 's': return RLMMakeSetter<short, long long>(colIndex, prop.isPrimary);
-        case 'i': return RLMMakeSetter<int, long long>(colIndex, prop.isPrimary);
-        case 'l': return RLMMakeSetter<long, long long>(colIndex, prop.isPrimary);
-        case 'q': return RLMMakeSetter<long long>(colIndex, prop.isPrimary);
-        case 'f': return RLMMakeSetter<float>(colIndex, prop.isPrimary);
-        case 'd': return RLMMakeSetter<double>(colIndex, prop.isPrimary);
-        case 'B': return RLMMakeSetter<bool>(colIndex, prop.isPrimary);
-        case 'c': return RLMMakeSetter<BOOL, bool>(colIndex, prop.isPrimary);
-        case 'S': return RLMMakeSetter<NSString *>(colIndex, prop.isPrimary);
-        case 'a': return RLMMakeSetter<NSDate *>(colIndex, prop.isPrimary);
-        case 'e': return RLMMakeSetter<NSData *>(colIndex, prop.isPrimary);
-        case 'k': return RLMMakeSetter<RLMObjectBase *>(colIndex, prop.isPrimary);
-        case 't': return RLMMakeSetter<RLMArray *>(colIndex, prop.isPrimary);
-        case '@': return RLMMakeSetter<id>(colIndex, prop.isPrimary);
+        case 's': return RLMMakeSetter<short, long long>(prop);
+        case 'i': return RLMMakeSetter<int, long long>(prop);
+        case 'l': return RLMMakeSetter<long, long long>(prop);
+        case 'q': return RLMMakeSetter<long long>(prop);
+        case 'f': return RLMMakeSetter<float>(prop);
+        case 'd': return RLMMakeSetter<double>(prop);
+        case 'B': return RLMMakeSetter<bool>(prop);
+        case 'c': return RLMMakeSetter<BOOL, bool>(prop);
+        case 'S': return RLMMakeSetter<NSString *>(prop);
+        case 'a': return RLMMakeSetter<NSDate *>(prop);
+        case 'e': return RLMMakeSetter<NSData *>(prop);
+        case 'k': return RLMMakeSetter<RLMObjectBase *>(prop);
+        case 't': return RLMMakeSetter<RLMArray *>(prop);
+        case '@': return RLMMakeSetter<id>(prop);
         default:
             @throw RLMException(@"Invalid accessor code");
     }

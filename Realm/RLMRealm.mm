@@ -23,6 +23,7 @@
 #import "RLMObject_Private.h"
 #import "RLMObjectSchema_Private.hpp"
 #import "RLMObjectStore.h"
+#import "RLMObject_Private.hpp"
 #import "RLMQueryUtil.hpp"
 #import "RLMRealmUtil.h"
 #import "RLMSchema_Private.h"
@@ -593,6 +594,164 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
     [_notifier stop];
 }
 
+struct PriorNotifyStuff {
+    size_t table;
+    size_t row;
+    size_t column;
+    __unsafe_unretained RLMObservationInfo *info;
+
+    bool needs_before = false;
+    bool needs_after = false;
+};
+
+class ModifiedRowParser {
+    size_t current_table = 0;
+    std::vector<PriorNotifyStuff>& observers;
+
+public:
+    ModifiedRowParser(std::vector<PriorNotifyStuff>& observers) : observers(observers) { }
+
+    // These would require having an observer before schema init
+    // Maybe do something here to throw an error when multiple processes have different schemas?
+    bool insert_group_level_table(size_t, size_t, StringData) noexcept { return false; }
+    bool erase_group_level_table(size_t, size_t) noexcept { return false; }
+    bool rename_group_level_table(size_t, StringData) noexcept { return false; }
+    bool insert_column(size_t, DataType, StringData) { return false; }
+    bool insert_link_column(size_t, DataType, StringData, size_t, size_t) { return false; }
+    bool erase_column(size_t) { return false; }
+    bool erase_link_column(size_t, size_t, size_t) { return false; }
+    bool rename_column(size_t, StringData) { return false; }
+    bool add_search_index(size_t) { return false; }
+    bool remove_search_index(size_t) { return false; }
+    bool add_primary_key(size_t) { return false; }
+    bool remove_primary_key() { return false; }
+    bool set_link_type(size_t, LinkType) { return false; }
+
+    bool select_table(size_t group_level_ndx, int, const size_t*) noexcept {
+        current_table = group_level_ndx;
+        return true;
+    }
+
+    bool insert_empty_rows(size_t, size_t, size_t, bool) {
+        // rows are only inserted at the end, so no need to do anything
+        return true;
+    }
+
+    bool erase_rows(size_t row_ndx, size_t, size_t last_row_ndx, bool unordered) noexcept {
+        for (auto& o : observers) {
+            if (o.table == current_table) {
+                if (o.row == row_ndx) {
+                    o.row = realm::npos;
+                    o.needs_after = false;
+                }
+                else if (unordered && o.row == last_row_ndx) {
+                    o.row = row_ndx;
+                }
+                else if (!unordered && o.row > row_ndx && o.row != realm::npos) {
+                    o.row -= 1;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool clear_table() noexcept {
+        for (auto& o : observers) {
+            if (o.table == current_table) {
+                o.row = realm::npos;
+                o.needs_after = false;
+            }
+        }
+        return true;
+    }
+
+
+    // Things that just mark the field as modified
+    bool set_int(size_t col_ndx, size_t row_ndx, int_fast64_t) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_bool(size_t col_ndx, size_t row_ndx, bool) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_float(size_t col_ndx, size_t row_ndx, float) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_double(size_t col_ndx, size_t row_ndx, double) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_string(size_t col_ndx, size_t row_ndx, StringData) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_binary(size_t col_ndx, size_t row_ndx, BinaryData) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_date_time(size_t col_ndx, size_t row_ndx, DateTime) { return mark_dirty(row_ndx, col_ndx); }
+    bool select_link_list(size_t col_ndx, size_t row_ndx) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_table(size_t col_ndx, size_t row_ndx) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_mixed(size_t col_ndx, size_t row_ndx, const Mixed&) { return mark_dirty(row_ndx, col_ndx); }
+    bool set_link(size_t col_ndx, size_t row_ndx, size_t) { return mark_dirty(row_ndx, col_ndx); }
+
+    // Things we don't need to do anything for
+    bool select_descriptor(int, const size_t*) { return true; }
+
+    // ideally should provide the kvo array diffing stuff
+    bool link_list_set(size_t, size_t) { return true; }
+    bool link_list_insert(size_t, size_t) { return true; }
+    bool link_list_move(size_t, size_t) { return true; }
+    bool link_list_erase(size_t) { return true; }
+    bool link_list_clear() { return true; }
+
+    // Things that we don't do in the binding
+    bool row_insert_complete() { return false; }
+    bool optimize_table() { return false; }
+    bool add_int_to_column(size_t, int_fast64_t) { return false; }
+    bool insert_int(size_t, size_t, size_t, int_fast64_t) { return false; }
+    bool insert_bool(size_t, size_t, size_t, bool) { return false; }
+    bool insert_float(size_t, size_t, size_t, float) { return false; }
+    bool insert_double(size_t, size_t, size_t, double) { return false; }
+    bool insert_string(size_t, size_t, size_t, StringData) { return false; }
+    bool insert_binary(size_t, size_t, size_t, BinaryData) { return false; }
+    bool insert_date_time(size_t, size_t, size_t, DateTime) { return false; }
+    bool insert_table(size_t, size_t, size_t) { return false; }
+    bool insert_mixed(size_t, size_t, size_t, const Mixed&) { return false; }
+    bool insert_link(size_t, size_t, size_t, size_t) { return false; }
+    bool insert_link_list(size_t, size_t, size_t) { return false; }
+
+private:
+    bool mark_dirty(size_t row_ndx, size_t col_ndx) {
+        for (auto& o : observers) {
+            if (o.table == current_table && o.row == row_ndx && o.column == col_ndx) {
+                if (o.needs_before) {
+                    o.needs_before = false;
+                    RLMWillChange(o.info, o.info.key);
+                }
+                o.needs_after = true;
+            }
+        }
+        return true;
+    }
+};
+
+static void advance_notify(SharedGroup *sg, RLMSchema *schema) {
+    std::vector<PriorNotifyStuff> prior;
+    for (RLMObjectSchema *objectSchema in schema.objectSchema) {
+        for (NSString *key in objectSchema->_observers) {
+            for (RLMObservationInfo *observer in objectSchema->_observers[key]) {
+                auto row = observer.obj->_row;
+                prior.push_back(PriorNotifyStuff{
+                    row.get_table()->get_index_in_group(),
+                    row.get_index(),
+                    observer.column,
+                    observer,
+                    (observer.options & NSKeyValueObservingOptionPrior) == NSKeyValueObservingOptionPrior});
+            }
+        }
+    }
+
+    if (prior.empty()) {
+        LangBindHelper::advance_read(*sg);
+        return;
+    }
+
+    ModifiedRowParser m(prior);
+    LangBindHelper::advance_read(*sg, m);
+
+    for (auto const& o : prior) {
+        if (o.needs_after) {
+            NSString *key = o.info.key;
+            RLMDidChange(o.info, key, [o.info.obj valueForKey:key]);
+        }
+    }
+}
+
 - (void)handleExternalCommit {
     RLMCheckThread(self);
     NSAssert(!_readOnly, @"Read-only realms do not have notifications");
@@ -600,7 +759,7 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
         if (_sharedGroup->has_changed()) { // Throws
             if (_autorefresh) {
                 if (_group) {
-                    LangBindHelper::advance_read(*_sharedGroup);
+                    advance_notify(_sharedGroup.get(), _schema);
                 }
                 [self sendNotifications:RLMRealmDidChangeNotification];
             }
@@ -627,7 +786,7 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
         // advance transaction if database has changed
         if (_sharedGroup->has_changed()) { // Throws
             if (_group) {
-                LangBindHelper::advance_read(*_sharedGroup);
+                advance_notify(_sharedGroup.get(), _schema);
             }
             else {
                 // Create the read transaction
