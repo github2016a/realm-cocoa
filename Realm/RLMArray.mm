@@ -214,13 +214,9 @@ static void RLMValidateMatchingObjectType(RLMArray *array, RLMObject *object) {
                                                                    arguments:args]];
 }
 
-- (NSUInteger)indexOfObjectWithPredicate:(NSPredicate *)predicate
+- (NSUInteger)indexOfObjectWithPredicate:(__unused NSPredicate *)predicate
 {
-    RLMResults *objects = [self objectsWithPredicate:predicate];
-    if ([objects count] == 0) {
-        return NSNotFound;
-    }
-    return [self indexOfObject:[objects firstObject]];
+    @throw RLMException(@"This method can only be called on RLMArray instances retrieved from an RLMRealm");
 }
 
 #pragma mark - Superclass Overrides

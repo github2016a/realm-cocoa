@@ -297,6 +297,28 @@
     XCTAssertThrows([company.employees indexOfObject:company]);
 }
 
+- (void)testIndexOfObjectWhere
+{
+    RLMRealm *realm = [RLMRealm defaultRealm];
+
+    [realm beginWriteTransaction];
+    EmployeeObject *po1 = [EmployeeObject createInRealm:realm withObject:@{@"name": @"Joe",  @"age": @40, @"hired": @YES}];
+    [EmployeeObject createInRealm:realm withObject:@{@"name": @"John", @"age": @30, @"hired": @NO}];
+    EmployeeObject *po3 = [EmployeeObject createInRealm:realm withObject:@{@"name": @"Jill", @"age": @25, @"hired": @YES}];
+
+    // create company
+    CompanyObject *company = [[CompanyObject alloc] init];
+    company.name = @"name";
+    [company.employees addObjects:@[po3, po1]];
+    [realm addObject:company];
+    [realm commitWriteTransaction];
+
+    // test LinkView RLMArray
+    XCTAssertEqual(0U, [company.employees indexOfObjectWhere:@"name = 'Jill'"]);
+    XCTAssertEqual(1U, [company.employees indexOfObjectWhere:@"name = 'Joe'"]);
+    XCTAssertEqual((NSUInteger)NSNotFound, [company.employees indexOfObjectWhere:@"name = 'John'"]);
+}
+
 - (void)testFastEnumeration
 {
     RLMRealm *realm = self.realmWithTestPath;
