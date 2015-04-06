@@ -410,12 +410,43 @@ public:
         AssertChanged(r, 0U, NSNull.null, [self objectToObserveForObject:obj]);
     }
 
-    {
+    { // should be testing assignment, not mutation
         KVORecorder r(self, obj, @"arrayCol");
         id mutator = [obj mutableArrayValueForKey:@"arrayCol"];
         [mutator addObject:obj];
         r.refresh();
         XCTAssertEqual(1U, r.notifications.size());
+    }
+}
+
+- (void)testArrayDiffs {
+    KVOObject *obj = [self createObject];
+    KVORecorder r(self, obj, @"arrayCol");
+
+    id mutator = [obj mutableArrayValueForKey:@"arrayCol"];
+
+    [mutator addObject:obj];
+    if (KVONotification *note = AssertNotification(r, 0U)) {
+        XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeInsertion);
+        XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:0]);
+    }
+
+    [mutator addObject:obj];
+    if (KVONotification *note = AssertNotification(r, 0U)) {
+        XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeInsertion);
+        XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:1]);
+    }
+
+    [mutator removeObjectAtIndex:0];
+    if (KVONotification *note = AssertNotification(r, 0U)) {
+        XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeRemoval);
+        XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:0]);
+    }
+
+    [mutator replaceObjectAtIndex:0 withObject:obj];
+    if (KVONotification *note = AssertNotification(r, 0U)) {
+        XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeReplacement);
+        XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:0]);
     }
 }
 @end
