@@ -25,12 +25,15 @@
 #import "RLMRealm_Private.hpp"
 #import "RLMSchema_Private.h"
 
+#import <atomic>
 #import <memory>
 #import <vector>
 
 RLM_ARRAY_TYPE(KVOObject)
 
 @interface KVOObject : RLMObject
+@property int pk; // Primary key for isEqual:
+
 @property BOOL                 boolCol;
 @property int16_t              int16Col;
 @property int32_t              int32Col;
@@ -45,6 +48,9 @@ RLM_ARRAY_TYPE(KVOObject)
 @property RLMArray<KVOObject> *arrayCol;
 @end
 @implementation KVOObject
++ (NSString *)primaryKey {
+    return @"pk";
+}
 @end
 
 @interface PlainKVOObject : NSObject
@@ -156,7 +162,9 @@ public:
 }
 
 - (id)createObject {
-    return [KVOObject createInDefaultRealmWithObject:@[@NO, @1, @2, @3, @0, @0, @NO, @"",
+    static std::atomic<int> pk{0};
+    return [KVOObject createInDefaultRealmWithObject:@[@(++pk),
+                                                       @NO, @1, @2, @3, @0, @0, @NO, @"",
                                                        NSData.data, [NSDate dateWithTimeIntervalSinceReferenceDate:0],
                                                        NSNull.null, NSNull.null]];
 }
@@ -394,7 +402,7 @@ public:
     {
         KVORecorder r(self, obj, @"objectCol");
         obj.objectCol = obj;
-        AssertChanged(r, 0U, NSNull.null, obj);
+        AssertChanged(r, 0U, NSNull.null, [self objectToObserveForObject:obj]);
     }
 
     {
@@ -417,6 +425,7 @@ public:
     obj.int32Col = 2;
     obj.int64Col = 3;
     obj.binaryCol = NSData.data;
+    obj.stringCol = @"";
     obj.dateCol = [NSDate dateWithTimeIntervalSinceReferenceDate:0];
     obj.arrayCol = [NSMutableArray array];
     return obj;
