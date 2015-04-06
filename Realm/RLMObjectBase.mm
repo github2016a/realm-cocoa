@@ -246,26 +246,50 @@ const NSUInteger RLMDescriptionMaxDepth = 5;
     }
 }
 
+- (void)willChange:(NSKeyValueChange)changeKind valuesAtIndexes:(NSIndexSet *)indexes forKey:(NSString *)key {
+    for (RLMObservationInfo *info in _objectSchema->_observers[key]) {
+        if (info.obj->_row.get_index() == _row.get_index()) {
+            RLMWillChange(info, key, changeKind, indexes);
+        }
+    }
+}
+
+- (void)didChange:(NSKeyValueChange)changeKind valuesAtIndexes:(NSIndexSet *)indexes forKey:(NSString *)key {
+    id value = [self valueForKey:key];
+
+    for (RLMObservationInfo *info in _objectSchema->_observers[key]) {
+        if (info.obj->_row.get_index() != _row.get_index()) {
+            continue;
+        }
+
+        RLMDidChange(info, key, value, changeKind, indexes);
+    }
+}
+
 @end
 
-void RLMWillChange(RLMObservationInfo *info, NSString *key) {
+void RLMWillChange(RLMObservationInfo *info, NSString *key, NSKeyValueChange kind, NSIndexSet *is) {
     if (info.options & NSKeyValueObservingOptionPrior) {
         NSMutableDictionary *change = [NSMutableDictionary new];
-        change[NSKeyValueChangeKindKey] = @(NSKeyValueChangeSetting);
+        change[NSKeyValueChangeKindKey] = @(kind);
         if (info.options & NSKeyValueObservingOptionOld)
             change[NSKeyValueChangeOldKey] = info.oldValue;
+        if (is)
+            change[NSKeyValueChangeIndexesKey] = is;
         change[NSKeyValueChangeNotificationIsPriorKey] = @YES;
         [info.observer observeValueForKeyPath:key ofObject:info.obj change:change context:info.context];
     }
 }
 
-void RLMDidChange(RLMObservationInfo *info, NSString *key, id value) {
+void RLMDidChange(RLMObservationInfo *info, NSString *key, id value, NSKeyValueChange kind, NSIndexSet *is) {
     NSMutableDictionary *change = [NSMutableDictionary new];
-    change[NSKeyValueChangeKindKey] = @(NSKeyValueChangeSetting);
+    change[NSKeyValueChangeKindKey] = @(kind);
     if (info.options & NSKeyValueObservingOptionOld)
         change[NSKeyValueChangeOldKey] = info.oldValue ?: NSNull.null;
     if (info.options & NSKeyValueObservingOptionNew)
         change[NSKeyValueChangeNewKey] = value ?: NSNull.null;
+    if (is)
+        change[NSKeyValueChangeIndexesKey] = is;
     [info.observer observeValueForKeyPath:key ofObject:info.obj change:change context:info.context];
     if (info.options & NSKeyValueObservingOptionOld) {
         info.oldValue = value;

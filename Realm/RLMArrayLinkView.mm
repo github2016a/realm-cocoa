@@ -79,15 +79,25 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     }
 }
 
-static void RLMArrayWillChange(__unsafe_unretained RLMArrayLinkView *const ar) {
-    if (ar->_parentObject->_objectSchema->_observers) {
-        [ar->_parentObject willChangeValueForKey:ar->_key];
+static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyValueChange kind, NSUInteger index, dispatch_block_t f) {
+    if (!ar->_parentObject->_objectSchema->_observers) {
+        f();
     }
+
+    NSIndexSet *is = [NSIndexSet indexSetWithIndex:index];
+    [ar->_parentObject willChange:kind valuesAtIndexes:is forKey:ar->_key];
+    f();
+    [ar->_parentObject didChange:kind valuesAtIndexes:is forKey:ar->_key];
 }
-static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
-    if (ar->_parentObject->_objectSchema->_observers) {
-        [ar->_parentObject didChangeValueForKey:ar->_key];
+
+static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyValueChange kind, NSIndexSet *index, dispatch_block_t f) {
+    if (!ar->_parentObject->_objectSchema->_observers) {
+        f();
     }
+
+    [ar->_parentObject willChange:kind valuesAtIndexes:index forKey:ar->_key];
+    f();
+    [ar->_parentObject didChange:kind valuesAtIndexes:index forKey:ar->_key];
 }
 
 //
@@ -161,9 +171,9 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
         [self.realm addObject:object];
     }
 
-    RLMArrayWillChange(self);
-    _backingLinkView->add(object->_row.get_index());
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeInsertion, _backingLinkView->size(), ^{
+        _backingLinkView->add(object->_row.get_index());
+    });
 }
 
 - (void)insertObject:(RLMObject *)object atIndex:(NSUInteger)index {
@@ -177,9 +187,9 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
         [self.realm addObject:object];
     }
 
-    RLMArrayWillChange(self);
-    _backingLinkView->insert(index, object->_row.get_index());
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeInsertion, index, ^{
+        _backingLinkView->insert(index, object->_row.get_index());
+    });
 }
 
 - (void)removeObjectAtIndex:(NSUInteger)index {
@@ -189,9 +199,9 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
         @throw RLMException(@"Trying to remove object at invalid index");
     }
 
-    RLMArrayWillChange(self);
-    _backingLinkView->remove(index);
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeRemoval, index, ^{
+        _backingLinkView->remove(index);
+    });
 }
 
 - (void)removeLastObject {
@@ -199,18 +209,18 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
 
     size_t size = _backingLinkView->size();
     if (size > 0){
-        RLMArrayWillChange(self);
-        _backingLinkView->remove(size-1);
-        RLMArrayDidChange(self);
+        changeArray(self, NSKeyValueChangeRemoval, size - 1, ^{
+            _backingLinkView->remove(size-1);
+        });
     }
 }
 
 - (void)removeAllObjects {
     RLMLinkViewArrayValidateInWriteTransaction(self);
 
-    RLMArrayWillChange(self);
-    _backingLinkView->clear();
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeRemoval, [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, _backingLinkView->size())], ^{
+        _backingLinkView->clear();
+    });
 }
 
 - (void)replaceObjectAtIndex:(NSUInteger)index withObject:(RLMObject *)object {
@@ -224,9 +234,9 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
         [self.realm addObject:object];
     }
 
-    RLMArrayWillChange(self);
-    _backingLinkView->set(index, object->_row.get_index());
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeReplacement, index, ^{
+        _backingLinkView->set(index, object->_row.get_index());
+    });
 }
 
 - (NSUInteger)indexOfObject:(RLMObject *)object {
@@ -273,9 +283,9 @@ static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
     RLMLinkViewArrayValidateInWriteTransaction(self);
 
     // delete all target rows from the realm
-    RLMArrayWillChange(self);
-    self->_backingLinkView->remove_all_target_rows();
-    RLMArrayDidChange(self);
+    changeArray(self, NSKeyValueChangeRemoval, [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, _backingLinkView->size())], ^{
+        _backingLinkView->clear();
+    });
 }
 
 - (RLMResults *)sortedResultsUsingDescriptors:(NSArray *)properties {

@@ -432,19 +432,19 @@ public:
     }
 
     [mutator addObject:obj];
-    if (KVONotification *note = AssertNotification(r, 0U)) {
+    if (KVONotification *note = AssertNotification(r, 1U)) {
         XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeInsertion);
         XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:1]);
     }
 
     [mutator removeObjectAtIndex:0];
-    if (KVONotification *note = AssertNotification(r, 0U)) {
+    if (KVONotification *note = AssertNotification(r, 2U)) {
         XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeRemoval);
         XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:0]);
     }
 
     [mutator replaceObjectAtIndex:0 withObject:obj];
-    if (KVONotification *note = AssertNotification(r, 0U)) {
+    if (KVONotification *note = AssertNotification(r, 3U)) {
         XCTAssertEqual([note->change[NSKeyValueChangeKindKey] intValue], NSKeyValueChangeReplacement);
         XCTAssertEqualObjects(note->change[NSKeyValueChangeIndexesKey], [NSIndexSet indexSetWithIndex:0]);
     }

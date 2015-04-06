@@ -29,5 +29,5 @@
 
 @end
 
-void RLMWillChange(RLMObservationInfo *info, NSString *key);
-void RLMDidChange(RLMObservationInfo *info, NSString *key, id value);
+void RLMWillChange(RLMObservationInfo *info, NSString *key, NSKeyValueChange kind = NSKeyValueChangeSetting, NSIndexSet *is=0);
+void RLMDidChange(RLMObservationInfo *info, NSString *key, id value, NSKeyValueChange kind = NSKeyValueChangeSetting, NSIndexSet *is=0);
