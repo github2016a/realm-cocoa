@@ -216,13 +216,16 @@ static inline void RLMSetValue(__unsafe_unretained RLMObjectBase *const obj, NSU
 }
 
 // array getter/setter
-static inline RLMArray *RLMGetArray(__unsafe_unretained RLMObjectBase *const obj, NSUInteger colIndex, __unsafe_unretained NSString *const objectClassName) {
+static inline RLMArray *RLMGetArray(__unsafe_unretained RLMObjectBase *const obj, NSUInteger colIndex,
+                                    __unsafe_unretained NSString *const objectClassName,
+                                    __unsafe_unretained NSString *const propName) {
     RLMVerifyAttached(obj);
 
     realm::LinkViewRef linkView = obj->_row.get_linklist(colIndex);
     RLMArrayLinkView *ar = [RLMArrayLinkView arrayWithObjectClassName:objectClassName
                                                                  view:linkView
-                                                                realm:obj->_realm];
+                                                         parentObject:obj
+                                                                  key:propName];
     return ar;
 }
 static inline void RLMSetValue(__unsafe_unretained RLMObjectBase *const obj, NSUInteger colIndex,
@@ -321,6 +324,7 @@ static inline void RLMSetValue(__unsafe_unretained RLMObjectBase *const obj, NSU
 // dynamic getter with column closure
 static IMP RLMAccessorGetter(RLMProperty *prop, char accessorCode, NSString *objectClassName) {
     NSUInteger colIndex = prop.column;
+    NSString *name = prop.name;
     switch (accessorCode) {
         case 's':
             return imp_implementationWithBlock(^(__unsafe_unretained RLMObjectBase *const obj) {
@@ -369,7 +373,7 @@ static IMP RLMAccessorGetter(RLMProperty *prop, char accessorCode, NSString *obj
             });
         case 't':
             return imp_implementationWithBlock(^(__unsafe_unretained RLMObjectBase *const obj) {
-                return RLMGetArray(obj, colIndex, objectClassName);
+                return RLMGetArray(obj, colIndex, objectClassName, name);
             });
         case '@':
             return imp_implementationWithBlock(^(__unsafe_unretained RLMObjectBase *const obj) {
@@ -692,7 +696,7 @@ id RLMDynamicGet(__unsafe_unretained RLMObjectBase *obj, __unsafe_unretained NSS
         case 'a': return RLMGetDate(obj, col);
         case 'e': return RLMGetData(obj, col);
         case 'k': return RLMGetLink(obj, col, prop.objectClassName);
-        case 't': return RLMGetArray(obj, col, prop.objectClassName);
+        case 't': return RLMGetArray(obj, col, prop.objectClassName, prop.name);
         case '@': return RLMGetAnyProperty(obj, col);
         default:
             @throw RLMException(@"Invalid accessor code");

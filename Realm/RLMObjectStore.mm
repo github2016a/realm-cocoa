@@ -332,9 +332,11 @@ void RLMInitializeSwiftListAccessor(RLMObjectBase *object) {
 
     for (RLMProperty *prop in object->_objectSchema.properties) {
         if (prop.type == RLMPropertyTypeArray) {
-            [RLMObjectUtilClass(YES) initializeListProperty:object property:prop array:[RLMArrayLinkView arrayWithObjectClassName:prop.objectClassName
-                                                                                                                             view:object->_row.get_linklist(prop.column)
-                                                                                                                            realm:object->_realm]];
+            [RLMObjectUtilClass(YES) initializeListProperty:object property:prop
+                                                      array:[RLMArrayLinkView arrayWithObjectClassName:prop.objectClassName
+                                                                                                  view:object->_row.get_linklist(prop.column)
+                                                                                                 parentObject:object
+                                                                                                   key:prop.name]];
         }
     }
 }

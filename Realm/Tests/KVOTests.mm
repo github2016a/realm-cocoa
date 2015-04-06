@@ -407,9 +407,10 @@ public:
 
     {
         KVORecorder r(self, obj, @"arrayCol");
-        [obj.arrayCol addObject:obj];
+        id mutator = [obj mutableArrayValueForKey:@"arrayCol"];
+        [mutator addObject:obj];
         r.refresh();
-        XCTAssertEqual(0U, r.notifications.size());
+        XCTAssertEqual(1U, r.notifications.size());
     }
 }
 @end

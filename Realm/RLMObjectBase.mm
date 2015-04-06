@@ -181,6 +181,13 @@ const NSUInteger RLMDescriptionMaxDepth = 5;
     }
 }
 
+- (id)mutableArrayValueForKey:(NSString *)key {
+    if (_objectSchema[key].type == RLMPropertyTypeArray) {
+        return [self valueForKey:key];
+    }
+    return [super mutableArrayValueForKey:key];
+}
+
 - (void)addObserver:(id)observer forKeyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options context:(void *)context {
     if (!_objectSchema->_observers) {
         _objectSchema->_observers = [NSMutableDictionary new];

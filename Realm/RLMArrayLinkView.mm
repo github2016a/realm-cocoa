@@ -34,15 +34,20 @@
 @implementation RLMArrayLinkView {
     realm::LinkViewRef _backingLinkView;
     RLMObjectSchema *_objectSchema;
+    RLMObjectBase *_parentObject;
+    NSString *_key;
 }
 
 + (RLMArrayLinkView *)arrayWithObjectClassName:(NSString *)objectClassName
                                           view:(realm::LinkViewRef)view
-                                         realm:(RLMRealm *)realm {
+                                  parentObject:(RLMObjectBase *)object
+                                           key:(NSString *)key {
     RLMArrayLinkView *ar = [[RLMArrayLinkView alloc] initWithObjectClassName:objectClassName standalone:NO];
+    ar->_realm = object->_realm;
     ar->_backingLinkView = view;
-    ar->_realm = realm;
-    ar->_objectSchema = realm.schema[objectClassName];
+    ar->_objectSchema = ar->_realm.schema[objectClassName];
+    ar->_parentObject = object;
+    ar->_key = key;
     return ar;
 }
 
@@ -71,6 +76,17 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     NSString *objectClassName = obj->_objectSchema.className;
     if (![objectClassName isEqualToString:expected]) {
         @throw RLMException(@"Object type is incorrect.", @{@"expected class" : expected, @"actual class" : objectClassName});
+    }
+}
+
+static void RLMArrayWillChange(__unsafe_unretained RLMArrayLinkView *const ar) {
+    if (ar->_parentObject->_objectSchema->_observers) {
+        [ar->_parentObject willChangeValueForKey:ar->_key];
+    }
+}
+static void RLMArrayDidChange(__unsafe_unretained RLMArrayLinkView *const ar) {
+    if (ar->_parentObject->_objectSchema->_observers) {
+        [ar->_parentObject didChangeValueForKey:ar->_key];
     }
 }
 
@@ -144,7 +160,10 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     if (object->_realm != self.realm) {
         [self.realm addObject:object];
     }
+
+    RLMArrayWillChange(self);
     _backingLinkView->add(object->_row.get_index());
+    RLMArrayDidChange(self);
 }
 
 - (void)insertObject:(RLMObject *)object atIndex:(NSUInteger)index {
@@ -157,7 +176,10 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     if (object->_realm != self.realm) {
         [self.realm addObject:object];
     }
+
+    RLMArrayWillChange(self);
     _backingLinkView->insert(index, object->_row.get_index());
+    RLMArrayDidChange(self);
 }
 
 - (void)removeObjectAtIndex:(NSUInteger)index {
@@ -166,7 +188,10 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     if (index >= _backingLinkView->size()) {
         @throw RLMException(@"Trying to remove object at invalid index");
     }
+
+    RLMArrayWillChange(self);
     _backingLinkView->remove(index);
+    RLMArrayDidChange(self);
 }
 
 - (void)removeLastObject {
@@ -174,14 +199,18 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
 
     size_t size = _backingLinkView->size();
     if (size > 0){
+        RLMArrayWillChange(self);
         _backingLinkView->remove(size-1);
+        RLMArrayDidChange(self);
     }
 }
 
 - (void)removeAllObjects {
     RLMLinkViewArrayValidateInWriteTransaction(self);
 
+    RLMArrayWillChange(self);
     _backingLinkView->clear();
+    RLMArrayDidChange(self);
 }
 
 - (void)replaceObjectAtIndex:(NSUInteger)index withObject:(RLMObject *)object {
@@ -194,7 +223,10 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     if (object->_realm != self.realm) {
         [self.realm addObject:object];
     }
+
+    RLMArrayWillChange(self);
     _backingLinkView->set(index, object->_row.get_index());
+    RLMArrayDidChange(self);
 }
 
 - (NSUInteger)indexOfObject:(RLMObject *)object {
@@ -241,11 +273,12 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
     RLMLinkViewArrayValidateInWriteTransaction(self);
 
     // delete all target rows from the realm
+    RLMArrayWillChange(self);
     self->_backingLinkView->remove_all_target_rows();
+    RLMArrayDidChange(self);
 }
 
-- (RLMResults *)sortedResultsUsingDescriptors:(NSArray *)properties
-{
+- (RLMResults *)sortedResultsUsingDescriptors:(NSArray *)properties {
     RLMLinkViewArrayValidateAttached(self);
 
     std::vector<size_t> columns;

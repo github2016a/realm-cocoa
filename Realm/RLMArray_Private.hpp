@@ -33,6 +33,7 @@ namespace realm {
 }
 
 @class RLMObjectSchema;
+@class RLMObjectBase;
 
 // RLMArray private properties/ivars for all subclasses
 @interface RLMArray () {
@@ -55,9 +56,10 @@ namespace realm {
 // LinkView backed RLMArray subclass
 //
 @interface RLMArrayLinkView : RLMArray
-+ (instancetype)arrayWithObjectClassName:(NSString *)objectClassName
-                                    view:(realm::LinkViewRef)view
-                                   realm:(RLMRealm *)realm;
++ (RLMArrayLinkView *)arrayWithObjectClassName:(NSString *)objectClassName
+                                          view:(realm::LinkViewRef)view
+                                  parentObject:(RLMObjectBase *)object
+                                           key:(NSString *)key;
 @end
 
 
