@@ -82,6 +82,7 @@ static inline void RLMValidateObjectClass(__unsafe_unretained RLMObjectBase *con
 static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyValueChange kind, NSUInteger index, dispatch_block_t f) {
     if (!ar->_parentObject->_objectSchema->_observers) {
         f();
+        return;
     }
 
     NSIndexSet *is = [NSIndexSet indexSetWithIndex:index];
@@ -93,6 +94,7 @@ static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyVal
 static void changeArray(__unsafe_unretained RLMArrayLinkView *const ar, NSKeyValueChange kind, NSIndexSet *index, dispatch_block_t f) {
     if (!ar->_parentObject->_objectSchema->_observers) {
         f();
+        return;
     }
 
     [ar->_parentObject willChange:kind valuesAtIndexes:index forKey:ar->_key];

@@ -594,7 +594,7 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
     [_notifier stop];
 }
 
-struct PriorNotifyStuff {
+struct ObserverState {
     size_t table;
     size_t row;
     size_t column;
@@ -602,19 +602,26 @@ struct PriorNotifyStuff {
 
     bool wants_willchange = false;
     bool changed = false;
+    std::vector<std::pair<NSKeyValueChange, NSMutableIndexSet *>> linkview_changes;
+    ObserverState *next = nullptr;
 };
 
 class ModifiedRowParser {
     size_t current_table = 0;
-    std::vector<PriorNotifyStuff>& observers;
+    std::vector<ObserverState>& observers;
+    ObserverState *active_linklist = nullptr;
 
 public:
-    ModifiedRowParser(std::vector<PriorNotifyStuff>& observers) : observers(observers) { }
+    ModifiedRowParser(std::vector<ObserverState>& observers) : observers(observers) { }
 
     void parse_complete() {
         for (auto& o : observers) {
-            if (o.wants_willchange && o.changed) {
+            if (!o.wants_willchange || !o.changed)
+                continue;
+            if (o.linkview_changes.size() != 1)
                 RLMWillChange(o.info, o.info.key);
+            else {
+                RLMWillChange(o.info, o.info.key, o.linkview_changes[0].first, o.linkview_changes[0].second);
             }
         }
     }
@@ -645,6 +652,7 @@ public:
         return true;
     }
 
+    // update linkview?
     bool erase_rows(size_t row_ndx, size_t, size_t last_row_ndx, bool unordered) noexcept {
         for (auto& o : observers) {
             if (o.table == current_table) {
@@ -663,6 +671,7 @@ public:
         return true;
     }
 
+    // update linkview?
     bool clear_table() noexcept {
         for (auto& o : observers) {
             if (o.table == current_table) {
@@ -673,6 +682,46 @@ public:
         return true;
     }
 
+    bool select_link_list(size_t col, size_t row) {
+        active_linklist = nullptr;
+        for (auto& o : observers) {
+            if (o.table == current_table && o.row == row && o.column == col) {
+                o.next = active_linklist;
+                active_linklist = &o;
+            }
+        }
+        return true;
+    }
+
+    void append_link_list_change(NSKeyValueChange kind, NSUInteger index) {
+        for (ObserverState *o = active_linklist; o; o = o->next) {
+            if (o->linkview_changes.empty() || o->linkview_changes.back().first != kind) {
+                o->linkview_changes.push_back(std::make_pair(kind, [NSMutableIndexSet new]));
+            }
+            [o->linkview_changes.back().second addIndex:index];
+            o->changed = true;
+        }
+
+    }
+
+    bool link_list_set(size_t index, size_t) {
+        append_link_list_change(NSKeyValueChangeReplacement, index);
+        return true;
+    }
+
+    bool link_list_insert(size_t index, size_t) {
+        append_link_list_change(NSKeyValueChangeInsertion, index);
+        return true;
+    }
+
+    bool link_list_erase(size_t index) {
+        append_link_list_change(NSKeyValueChangeRemoval, index);
+        return true;
+    }
+    bool link_list_clear() { return true; }
+
+    bool link_list_move(size_t, size_t) { return true; }
+
     // Things that just mark the field as modified
     bool set_int(size_t col, size_t row, int_fast64_t) { return mark_dirty(row, col); }
     bool set_bool(size_t col, size_t row, bool) { return mark_dirty(row, col); }
@@ -681,20 +730,12 @@ public:
     bool set_string(size_t col, size_t row, StringData) { return mark_dirty(row, col); }
     bool set_binary(size_t col, size_t row, BinaryData) { return mark_dirty(row, col); }
     bool set_date_time(size_t col, size_t row, DateTime) { return mark_dirty(row, col); }
-    bool select_link_list(size_t col, size_t row) { return mark_dirty(row, col); }
     bool set_table(size_t col, size_t row) { return mark_dirty(row, col); }
     bool set_mixed(size_t col, size_t row, const Mixed&) { return mark_dirty(row, col); }
     bool set_link(size_t col, size_t row, size_t) { return mark_dirty(row, col); }
 
     // Things we don't need to do anything for
     bool select_descriptor(int, const size_t*) { return true; }
-
-    // ideally should provide the kvo array diffing stuff
-    bool link_list_set(size_t, size_t) { return true; }
-    bool link_list_insert(size_t, size_t) { return true; }
-    bool link_list_move(size_t, size_t) { return true; }
-    bool link_list_erase(size_t) { return true; }
-    bool link_list_clear() { return true; }
 
     // Things that we don't do in the binding
     bool row_insert_complete() { return false; }
@@ -724,12 +765,12 @@ private:
 };
 
 static void advance_notify(SharedGroup *sg, RLMSchema *schema) {
-    std::vector<PriorNotifyStuff> prior;
+    std::vector<ObserverState> prior;
     for (RLMObjectSchema *objectSchema in schema.objectSchema) {
         for (NSString *key in objectSchema->_observers) {
             for (RLMObservationInfo *observer in objectSchema->_observers[key]) {
                 auto row = observer.obj->_row;
-                prior.push_back(PriorNotifyStuff{
+                prior.push_back(ObserverState{
                     row.get_table()->get_index_in_group(),
                     row.get_index(),
                     observer.column,
@@ -750,7 +791,15 @@ static void advance_notify(SharedGroup *sg, RLMSchema *schema) {
     for (auto const& o : prior) {
         if (o.changed) {
             NSString *key = o.info.key;
-            RLMDidChange(o.info, key, [o.info.obj valueForKey:key]);
+            if (o.linkview_changes.size() != 1) {
+                assert(o.linkview_changes.empty());
+                RLMDidChange(o.info, key, [o.info.obj valueForKey:key]);
+            }
+            else {
+                RLMDidChange(o.info, key, [o.info.obj valueForKey:key],
+                             o.linkview_changes[0].first,
+                             o.linkview_changes[0].second);
+            }
         }
     }
 }

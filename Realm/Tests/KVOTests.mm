@@ -152,6 +152,7 @@ public:
 //   - standalone added to realm after observer added
 //   - ignored properties
 //   - Prior called at right time
+//   - Batch array modification
 
 @implementation KVOSingleObjectTests
 - (void)setUp {
