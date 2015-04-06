@@ -251,6 +251,7 @@ const NSUInteger RLMDescriptionMaxDepth = 5;
 void RLMWillChange(RLMObservationInfo *info, NSString *key) {
     if (info.options & NSKeyValueObservingOptionPrior) {
         NSMutableDictionary *change = [NSMutableDictionary new];
+        change[NSKeyValueChangeKindKey] = @(NSKeyValueChangeSetting);
         if (info.options & NSKeyValueObservingOptionOld)
             change[NSKeyValueChangeOldKey] = info.oldValue;
         change[NSKeyValueChangeNotificationIsPriorKey] = @YES;
@@ -260,6 +261,7 @@ void RLMWillChange(RLMObservationInfo *info, NSString *key) {
 
 void RLMDidChange(RLMObservationInfo *info, NSString *key, id value) {
     NSMutableDictionary *change = [NSMutableDictionary new];
+    change[NSKeyValueChangeKindKey] = @(NSKeyValueChangeSetting);
     if (info.options & NSKeyValueObservingOptionOld)
         change[NSKeyValueChangeOldKey] = info.oldValue ?: NSNull.null;
     if (info.options & NSKeyValueObservingOptionNew)

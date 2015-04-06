@@ -131,14 +131,19 @@ public:
 @property (nonatomic, strong) RLMRealm *realm;
 @end
 
+#define AssertNotification(recorder, index) ([&]{ \
+    (recorder).refresh(); \
+    XCTAssertGreaterThan((recorder).notifications.size(), index); \
+    return (recorder).notifications.size() > index ? &(recorder).notifications[index] : nullptr; \
+})()
+
 // Validate that `recorder` has enough notifications for `index` to be valid,
 // and if it does validate that the notification is correct
 #define AssertChanged(recorder, index, from, to) do { \
-    (recorder).refresh(); \
-    XCTAssertGreaterThan((recorder).notifications.size(), index); \
-    if ((recorder).notifications.size() > index) { \
-        XCTAssertEqualObjects((from), (recorder).notifications[index].change[NSKeyValueChangeOldKey]); \
-        XCTAssertEqualObjects((to), (recorder).notifications[index].change[NSKeyValueChangeNewKey]); \
+    if (KVONotification *note = AssertNotification((recorder), (index))) { \
+        XCTAssertEqualObjects(@(NSKeyValueChangeSetting), note->change[NSKeyValueChangeKindKey]); \
+        XCTAssertEqualObjects((from), note->change[NSKeyValueChangeOldKey]); \
+        XCTAssertEqualObjects((to), note->change[NSKeyValueChangeNewKey]); \
     } \
 } while (false)
 
