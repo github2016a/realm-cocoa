@@ -221,9 +221,13 @@ const NSUInteger RLMDescriptionMaxDepth = 5;
     for (RLMObservationInfo *info in observers) {
         if (info.observer == observer) {
             [observers removeObject:info];
-            break;
+            return;
         }
     }
+
+    NSString *msg = [NSString stringWithFormat:@"Cannot remove an observer <%@ %p> for the key path \"%@\" from <%@ %p> because it is not registered as an observer.",
+                     [observer class], observer, keyPath, self.class.className, self];
+    @throw [NSException exceptionWithName:NSRangeException reason:msg userInfo:nil];
 }
 
 - (void)willChangeValueForKey:(NSString *)key {

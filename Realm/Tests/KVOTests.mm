@@ -175,6 +175,14 @@ public:
                                                        NSNull.null, NSNull.null]];
 }
 
+- (void)testRemoveObserver {
+    KVOObject *obj = [self createObject];
+    XCTAssertThrowsSpecificNamed([obj removeObserver:self forKeyPath:@"int32Col"], NSException, NSRangeException);
+    XCTAssertNoThrow([obj addObserver:self forKeyPath:@"int32Col" options:0 context:nullptr]);
+    XCTAssertNoThrow([obj removeObserver:self forKeyPath:@"int32Col"]);
+    XCTAssertThrowsSpecificNamed([obj removeObserver:self forKeyPath:@"int32Col"], NSException, NSRangeException);
+}
+
 - (void)testSimple {
     KVOObject *obj = [self createObject];
     {
