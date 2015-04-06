@@ -600,8 +600,8 @@ struct PriorNotifyStuff {
     size_t column;
     __unsafe_unretained RLMObservationInfo *info;
 
-    bool needs_before = false;
-    bool needs_after = false;
+    bool wants_willchange = false;
+    bool changed = false;
 };
 
 class ModifiedRowParser {
@@ -610,6 +610,14 @@ class ModifiedRowParser {
 
 public:
     ModifiedRowParser(std::vector<PriorNotifyStuff>& observers) : observers(observers) { }
+
+    void parse_complete() {
+        for (auto& o : observers) {
+            if (o.wants_willchange && o.changed) {
+                RLMWillChange(o.info, o.info.key);
+            }
+        }
+    }
 
     // These would require having an observer before schema init
     // Maybe do something here to throw an error when multiple processes have different schemas?
@@ -642,7 +650,7 @@ public:
             if (o.table == current_table) {
                 if (o.row == row_ndx) {
                     o.row = realm::npos;
-                    o.needs_after = false;
+                    o.changed = false;
                 }
                 else if (unordered && o.row == last_row_ndx) {
                     o.row = row_ndx;
@@ -659,7 +667,7 @@ public:
         for (auto& o : observers) {
             if (o.table == current_table) {
                 o.row = realm::npos;
-                o.needs_after = false;
+                o.changed = false;
             }
         }
         return true;
@@ -708,11 +716,7 @@ private:
     bool mark_dirty(size_t row_ndx, size_t col_ndx) {
         for (auto& o : observers) {
             if (o.table == current_table && o.row == row_ndx && o.column == col_ndx) {
-                if (o.needs_before) {
-                    o.needs_before = false;
-                    RLMWillChange(o.info, o.info.key);
-                }
-                o.needs_after = true;
+                o.changed = true;
             }
         }
         return true;
@@ -744,7 +748,7 @@ static void advance_notify(SharedGroup *sg, RLMSchema *schema) {
     LangBindHelper::advance_read(*sg, m);
 
     for (auto const& o : prior) {
-        if (o.needs_after) {
+        if (o.changed) {
             NSString *key = o.info.key;
             RLMDidChange(o.info, key, [o.info.obj valueForKey:key]);
         }
