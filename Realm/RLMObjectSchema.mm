@@ -28,7 +28,7 @@
 #import "RLMSwiftSupport.h"
 #import "RLMUtil.hpp"
 
-#import <tightdb/group.hpp>
+#import <realm/group.hpp>
 
 // private properties
 @interface RLMObjectSchema ()
@@ -38,7 +38,7 @@
 
 @implementation RLMObjectSchema {
     // table accessor optimization
-    tightdb::TableRef _table;
+    realm::TableRef _table;
 }
 
 - (instancetype)initWithClassName:(NSString *)objectClassName objectClass:(Class)objectClass properties:(NSArray *)properties {
@@ -84,7 +84,7 @@
     }
     schema.className = className;
     schema.objectClass = objectClass;
-    schema.accessorClass = RLMObject.class;
+    schema.accessorClass = RLMDynamicObject.class;
     schema.isSwiftClass = isSwift;
 
     // create array of RLMProperties, inserting properties of superclasses first
@@ -99,15 +99,23 @@
     schema.properties = props;
 
     // verify that we didn't add any properties twice due to inheritance
-    assert(props.count == [NSSet setWithArray:[props valueForKey:@"name"]].count);
+    if (props.count != [NSSet setWithArray:[props valueForKey:@"name"]].count) {
+        NSCountedSet *countedPropertyNames = [NSCountedSet setWithArray:[props valueForKey:@"name"]];
+        NSSet *duplicatePropertyNames = [countedPropertyNames filteredSetUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id object, NSDictionary *) {
+            return [countedPropertyNames countForObject:object] > 1;
+        }]];
+
+        if (duplicatePropertyNames.count == 1) {
+            @throw RLMException([NSString stringWithFormat:@"Property '%@' is declared multiple times in the class hierarchy of '%@'", duplicatePropertyNames.allObjects.firstObject, className]);
+        } else {
+            @throw RLMException([NSString stringWithFormat:@"Object '%@' has properties that are declared multiple times in its class hierarchy: '%@'", className, [duplicatePropertyNames.allObjects componentsJoinedByString:@"', '"]]);
+        }
+    }
 
     if (NSString *primaryKey = [objectClass primaryKey]) {
         for (RLMProperty *prop in schema.properties) {
             if ([primaryKey isEqualToString:prop.name]) {
-                 // FIXME - enable for ints when we have core suppport
-                if (prop.type == RLMPropertyTypeString) {
-                    prop.indexed = YES;
-                }
+                prop.indexed = YES;
                 schema.primaryKeyProperty = prop;
                 break;
             }
@@ -168,6 +176,12 @@
             Ivar ivar = class_getInstanceVariable(objectClass, propName.UTF8String);
             id value = object_getIvar(swiftObjectInstance, ivar);
             NSString *className = [value _rlmArray].objectClassName;
+            NSUInteger existing = [propArray indexOfObjectPassingTest:^BOOL(RLMProperty *obj, __unused NSUInteger idx, __unused BOOL *stop) {
+                return [obj.name isEqualToString:propName];
+            }];
+            if (existing != NSNotFound) {
+                [propArray removeObjectAtIndex:existing];
+            }
             [propArray addObject:[[RLMProperty alloc] initSwiftListPropertyWithName:propName
                                                                                ivar:ivar
                                                                     objectClassName:className]];
@@ -181,7 +195,7 @@
 // generate a schema from a table - specify the custom class name for the dynamic
 // class and the name to be used in the schema - used for migrations and dynamic interface
 +(instancetype)schemaFromTableForClassName:(NSString *)className realm:(RLMRealm *)realm {
-    tightdb::TableRef table = RLMTableForObjectClass(realm, className);
+    realm::TableRef table = RLMTableForObjectClass(realm, className);
     if (!table) {
         return nil;
     }
@@ -199,7 +213,7 @@
         prop.column = col;
         if (prop.type == RLMPropertyTypeObject || prop.type == RLMPropertyTypeArray) {
             // set link type for objects and arrays
-            tightdb::TableRef linkTable = table->get_link_target(col);
+            realm::TableRef linkTable = table->get_link_target(col);
             prop.objectClassName = RLMClassForTableName(@(linkTable->get_name().data()));
         }
 
@@ -221,9 +235,9 @@
         }
     }
 
-    // for dynamic schema use vanilla RLMObject accessor classes
+    // for dynamic schema use vanilla RLMDynamicObject accessor classes
     schema.objectClass = RLMObject.class;
-    schema.accessorClass = RLMObject.class;
+    schema.accessorClass = RLMDynamicObject.class;
     schema.standaloneClass = RLMObject.class;
 
     return schema;
@@ -241,7 +255,7 @@
     // call property setter to reset map and primary key
     schema.properties = [[NSArray allocWithZone:zone] initWithArray:_properties copyItems:YES];
 
-    // _table not copied as it's tightdb::Group-specific
+    // _table not copied as it's realm::Group-specific
     return schema;
 }
 
@@ -259,7 +273,7 @@
     schema->_propertiesByName = _propertiesByName;
     schema->_primaryKeyProperty = _primaryKeyProperty;
 
-    // _table not copied as it's tightdb::Group-specific
+    // _table not copied as it's realm::Group-specific
     return schema;
 }
 
@@ -291,27 +305,27 @@
     return [NSString stringWithFormat:@"%@ {\n%@}", self.className, propertiesString];
 }
 
-- (tightdb::Table *)table {
+- (realm::Table *)table {
     if (!_table) {
         _table = RLMTableForObjectClass(_realm, _className);
     }
     return _table.get();
 }
 
-- (void)setTable:(tightdb::Table *)table {
+- (void)setTable:(realm::Table *)table {
     _table.reset(table);
 }
 
 @end
 
-tightdb::TableRef RLMTableForObjectClass(RLMRealm *realm,
+realm::TableRef RLMTableForObjectClass(RLMRealm *realm,
                                          NSString *className,
                                          bool &created) {
     NSString *tableName = RLMTableNameForClass(className);
     return realm.group->get_or_add_table(tableName.UTF8String, &created);
 }
 
-tightdb::TableRef RLMTableForObjectClass(RLMRealm *realm,
+realm::TableRef RLMTableForObjectClass(RLMRealm *realm,
                                          NSString *className) {
     NSString *tableName = RLMTableNameForClass(className);
     return realm.group->get_table(tableName.UTF8String);

@@ -36,11 +36,10 @@ end
 # Script
 ##########################
 
-# Remove Realm target and dependency from all objc projects
+# Remove Realm target and dependencies from all example objc projects
 
 objc_examples = [
   "examples/ios/objc/RealmExamples.xcodeproj",
-  "examples/ios/swift/RealmExamples.xcodeproj",
   "examples/osx/objc/RealmExamples.xcodeproj"
 ]
 
@@ -51,23 +50,25 @@ objc_examples.each do |example|
   filepath = File.join(example, "project.pbxproj")
   contents = File.read(filepath)
   File.open(filepath, "w") do |file|
-    file.puts contents.gsub("/build/ios", "/ios")
-                      .gsub("Realm/Swift", "Swift")
+    file.puts contents.gsub("/build/ios", "/ios/static")
                       .gsub("/build/osx", "/osx")
   end
 end
 
-# Update location of RealmSwift.xcodeproj for all swift projects
+# Remove RealmSwift target and dependencies from all example swift projects
 
 swift_examples = [
-  "examples/ios/swift-next/RealmExamples.xcodeproj"
+  "examples/ios/swift/RealmExamples.xcodeproj"
 ]
 
 swift_examples.each do |example|
+  remove_all_dependencies(example)
+  remove_target(example, "RealmSwift")
+
   filepath = File.join(example, "project.pbxproj")
   contents = File.read(filepath)
   File.open(filepath, "w") do |file|
-    file.puts contents.gsub("../../../RealmSwift.xcodeproj", "../../../swift/RealmSwift.xcodeproj")
+    file.puts contents.gsub("/build/ios/swift", "/ios")
   end
 end
 
@@ -76,5 +77,5 @@ end
 rakefile_path = "examples/ios/rubymotion/Simple/Rakefile"
 contents = File.read(rakefile_path)
 File.open(rakefile_path, "w") do |file|
-  file.puts contents.gsub("/build/ios", "/ios")
+  file.puts contents.gsub("/build/ios", "/ios/static")
 end

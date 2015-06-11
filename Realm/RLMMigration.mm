@@ -28,8 +28,8 @@
 #import "RLMResults_Private.h"
 #import "RLMSchema_Private.h"
 
-#import <tightdb/link_view.hpp>
-#import <tightdb/table_view.hpp>
+#import <realm/link_view.hpp>
+#import <realm/table_view.hpp>
 
 // The source realm for a migration has to use a SharedGroup to be able to share
 // the file with the destination realm, but we don't want to let the user call
@@ -102,29 +102,18 @@
         // if we have a new primary key not equal to our old one, verify uniqueness
         RLMProperty *primaryProperty = objectSchema.primaryKeyProperty;
         RLMProperty *oldPrimaryProperty = [[_oldRealm.schema schemaForClassName:objectSchema.className] primaryKeyProperty];
-        if (primaryProperty && primaryProperty != oldPrimaryProperty) {
-            // FIXME: replace with count of distinct once we support indexing
+        if (!primaryProperty || primaryProperty == oldPrimaryProperty) {
+            continue;
+        }
 
-            // FIXME: support other types
-            tightdb::Table *table = objectSchema.table;
-            NSUInteger count = table->size();
-            if (primaryProperty.type == RLMPropertyTypeString) {
-                if (!table->has_search_index(primaryProperty.column)) {
-                    table->add_search_index(primaryProperty.column);
-                }
-                if (table->get_distinct_view(primaryProperty.column).size() != count) {
-                    NSString *reason = [NSString stringWithFormat:@"Primary key property '%@' has duplicate values after migration.", primaryProperty.name];
-                    @throw RLMException(reason);
-                }
-            }
-            else {
-                for (NSUInteger i = 0; i < count; i++) {
-                    if (table->count_int(primaryProperty.column, table->get_int(primaryProperty.column, i)) > 1) {
-                        NSString *reason = [NSString stringWithFormat:@"Primary key property '%@' has duplicate values after migration.", primaryProperty.name];
-                        @throw RLMException(reason);
-                    }
-                }
-            }
+        realm::Table *table = objectSchema.table;
+        NSUInteger count = table->size();
+        if (!table->has_search_index(primaryProperty.column)) {
+            table->add_search_index(primaryProperty.column);
+        }
+        if (table->get_distinct_view(primaryProperty.column).size() != count) {
+            NSString *reason = [NSString stringWithFormat:@"Primary key property '%@' has duplicate values after migration.", primaryProperty.name];
+            @throw RLMException(reason);
         }
     }
 }
@@ -140,7 +129,7 @@
         }
 
         // apply block and set new schema version
-        NSUInteger oldVersion = RLMRealmSchemaVersion(_realm);
+        uint64_t oldVersion = RLMRealmSchemaVersion(_realm);
         block(self, oldVersion);
 
         // verify uniqueness for any new unique columns before committing
@@ -151,12 +140,40 @@
     }
 }
 
--(RLMObject *)createObject:(NSString *)className withObject:(id)object {
-    return [_realm createObject:className withObject:object];
+-(RLMObject *)createObject:(NSString *)className withValue:(id)value {
+    return [_realm createObject:className withValue:value];
+}
+
+- (RLMObject *)createObject:(NSString *)className withObject:(id)object {
+    return [self createObject:className withValue:object];
 }
 
 - (void)deleteObject:(RLMObject *)object {
     [_realm deleteObject:object];
+}
+
+- (BOOL)deleteDataForClassName:(NSString *)name {
+    if (!name) {
+        return false;
+    }
+
+    size_t table = _realm.group->find_table(RLMStringDataWithNSString(RLMTableNameForClass(name)));
+    if (table == realm::not_found) {
+        return false;
+    }
+
+    if ([_realm.schema schemaForClassName:name]) {
+        _realm.group->get_table(table)->clear();
+    }
+    else {
+        _realm.group->remove_table(table);
+
+        if (RLMRealmPrimaryKeyForObjectClass(_realm, name)) {
+            RLMRealmSetPrimaryKeyForObjectClass(_realm, name, nil);
+        }
+    }
+
+    return true;
 }
 
 @end

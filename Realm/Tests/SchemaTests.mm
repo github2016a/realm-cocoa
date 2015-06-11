@@ -64,10 +64,69 @@ RLM_ARRAY_TYPE(SchemaTestClassSecondChild)
 @implementation SchemaTestClassLink
 @end
 
+@interface SchemaTestClassWithSingleDuplicatePropertyBase : FakeObject
+@property NSString *string;
+@end
+
+@implementation SchemaTestClassWithSingleDuplicatePropertyBase
+@end
+
+@interface SchemaTestClassWithSingleDuplicateProperty : SchemaTestClassWithSingleDuplicatePropertyBase
+@property NSString *string;
+@end
+
+@implementation SchemaTestClassWithSingleDuplicateProperty
+@dynamic string;
+@end
+
+@interface SchemaTestClassWithMultipleDuplicatePropertiesBase : FakeObject
+@property NSString *string;
+@property int integer;
+@end
+
+@implementation SchemaTestClassWithMultipleDuplicatePropertiesBase
+@end
+
+@interface SchemaTestClassWithMultipleDuplicateProperties : SchemaTestClassWithMultipleDuplicatePropertiesBase
+@property NSString *string;
+@property int integer;
+@end
+
+@implementation SchemaTestClassWithMultipleDuplicateProperties
+@dynamic string;
+@dynamic integer;
+@end
+
+@interface UnindexableProperty : FakeObject
+@property double unindexable;
+@end
+@implementation UnindexableProperty
++ (NSArray *)indexedProperties {
+    return @[@"unindexable"];
+}
+@end
+
+
+@interface InvalidPrimaryKeyType : FakeObject
+@property double primaryKey;
+@end
+@implementation InvalidPrimaryKeyType
++ (NSString *)primaryKey {
+    return @"primaryKey";
+}
+@end
+
 @interface SchemaTests : RLMTestCase
 @end
 
 @implementation SchemaTests
+
+- (void)testNoSchemaForUnpersistedObjectClasses {
+    RLMSchema *schema = [RLMSchema sharedSchema];
+    XCTAssertNil([schema schemaForClassName:@"RLMObject"]);
+    XCTAssertNil([schema schemaForClassName:@"RLMObjectBase"]);
+    XCTAssertNil([schema schemaForClassName:@"RLMDynamicObject"]);
+}
 
 - (void)testInheritanceInitialization
 {
@@ -149,9 +208,9 @@ RLM_ARRAY_TYPE(SchemaTestClassSecondChild)
         [self deleteFiles];
         RLMRealm *realm = [self realmWithTestPathAndSchema:schema];
         [realm beginWriteTransaction];
-        [realm createObject:@"SchemaTestClassBase" withObject:@{@"baseCol": @[@0]}];
-        [realm createObject:@"SchemaTestClassFirstChild" withObject:@{@"baseCol": @[@0], @"firstChildCol": @[@0]}];
-        [realm createObject:@"SchemaTestClassSecondChild" withObject:@{@"baseCol": @[@0], @"secondChildCol": @[@0]}];
+        [realm createObject:@"SchemaTestClassBase" withValue:@{@"baseCol": @[@0]}];
+        [realm createObject:@"SchemaTestClassFirstChild" withValue:@{@"baseCol": @[@0], @"firstChildCol": @[@0]}];
+        [realm createObject:@"SchemaTestClassSecondChild" withValue:@{@"baseCol": @[@0], @"secondChildCol": @[@0]}];
         [realm commitWriteTransaction];
     } while (std::next_permutation(testClasses, std::end(testClasses), pred));
 }
@@ -337,6 +396,24 @@ RLM_ARRAY_TYPE(SchemaTestClassSecondChild)
                                               @"\t\t}\n"
                                               @"\t}\n"
                                               @"}");
+}
+
+- (void)testClassWithDuplicateProperties
+{
+    RLMAssertThrowsWithReasonMatching([RLMObjectSchema schemaForObjectClass:SchemaTestClassWithSingleDuplicateProperty.class], @"'string' .* multiple times .* 'SchemaTestClassWithSingleDuplicateProperty'");
+    RLMAssertThrowsWithReasonMatching([RLMObjectSchema schemaForObjectClass:SchemaTestClassWithMultipleDuplicateProperties.class], @"'SchemaTestClassWithMultipleDuplicateProperties' .* declared multiple times");
+}
+
+- (void)testClassWithInvalidPrimaryKey {
+    XCTAssertThrows([RLMObjectSchema schemaForObjectClass:InvalidPrimaryKeyType.class]);
+}
+
+- (void)testClassWithUnindexableProperty {
+    RLMObjectSchema *objectSchema = [RLMObjectSchema schemaForObjectClass:UnindexableProperty.class];
+    RLMSchema *schema = [[RLMSchema alloc] init];
+    schema.objectSchema = @[objectSchema];
+    RLMAssertThrowsWithReasonMatching([self realmWithTestPathAndSchema:schema],
+                                      @".*UnindexableProperty\\.unindexable.*double.*");
 }
 
 @end

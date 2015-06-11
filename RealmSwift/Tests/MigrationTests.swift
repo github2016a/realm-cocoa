@@ -37,6 +37,10 @@ private func realmWithSingleClassProperties(path: String, className: String, pro
     return realmWithSingleClass(path, objectSchema)
 }
 
+private func dynamicRealm(path: String) -> RLMRealm {
+    return RLMRealm(path: path, key: nil, readOnly: false, inMemory: false, dynamic: true, schema: nil, error: nil)
+}
+
 class MigrationTests: TestCase {
 
     // MARK Utility methods
@@ -47,11 +51,11 @@ class MigrationTests: TestCase {
             Realm(path: realmPath)
             return
         }
-        XCTAssertEqual(UInt(0), schemaVersionAtPath(realmPath)!, "Initial version should be 0")
+        XCTAssertEqual(UInt64(0), schemaVersionAtPath(realmPath)!, "Initial version should be 0")
     }
 
     // migrate realm at path and ensure migration
-    private func migrateAndTestRealm(realmPath: String, shouldRun: Bool = true, schemaVersion: UInt = 1, autoMigration: Bool = false, block: MigrationBlock? = nil) {
+    private func migrateAndTestRealm(realmPath: String, shouldRun: Bool = true, schemaVersion: UInt64 = 1, autoMigration: Bool = false, block: MigrationBlock? = nil) {
         var didRun = false
         setSchemaVersion(schemaVersion, realmPath, { migration, oldSchemaVersion in
             if let block = block {
@@ -83,23 +87,23 @@ class MigrationTests: TestCase {
         migrateRealm(Realm.defaultPath, encryptionKey: nil)
 
         XCTAssertEqual(didRun, true)
-        XCTAssertEqual(UInt(1), schemaVersionAtPath(Realm.defaultPath)!)
+        XCTAssertEqual(UInt64(1), schemaVersionAtPath(Realm.defaultPath)!)
     }
 
     func testSetSchemaVersion() {
         createAndTestRealmAtPath(testRealmPath())
         migrateAndTestRealm(testRealmPath())
 
-        XCTAssertEqual(UInt(1), schemaVersionAtPath(testRealmPath())!)
+        XCTAssertEqual(UInt64(1), schemaVersionAtPath(testRealmPath())!)
     }
 
     func testSchemaVersionAtPath() {
         var error : NSError? = nil
-        XCTAssertNil(schemaVersionAtPath(Realm.defaultPath, error: &error), "Version should be nil before Realm creation")
+        assertNil(schemaVersionAtPath(Realm.defaultPath, error: &error), "Version should be nil before Realm creation")
         XCTAssertNotNil(error, "Error should be set")
 
         Realm()
-        XCTAssertEqual(UInt(0), schemaVersionAtPath(Realm.defaultPath)!, "Initial version should be 0")
+        XCTAssertEqual(UInt64(0), schemaVersionAtPath(Realm.defaultPath)!, "Initial version should be 0")
         assertThrows(schemaVersionAtPath("/dev/null"))
     }
 
@@ -135,6 +139,10 @@ class MigrationTests: TestCase {
 
     func testEnumerate() {
         autoreleasepool {
+            _ = Realm()
+        }
+
+        autoreleasepool {
             self.migrateAndTestRealm(Realm.defaultPath, block: { migration, oldSchemaVersion in
                 migration.enumerate("SwiftStringObject", { oldObj, newObj in
                     XCTFail("No objects to enumerate")
@@ -158,45 +166,56 @@ class MigrationTests: TestCase {
                 migration.enumerate("SwiftStringObject", { oldObj, newObj in
                     XCTAssertEqual(newObj!.objectSchema.className, "SwiftStringObject")
                     XCTAssertEqual(oldObj!.objectSchema.className, "SwiftStringObject")
-                    XCTAssertEqual(newObj!["stringCol"] as String, "string")
-                    XCTAssertEqual(oldObj!["stringCol"] as String, "string")
-                    self.assertThrows(oldObj!["noSuchCol"] as String)
-                    self.assertThrows(newObj!["noSuchCol"] as String)
+                    XCTAssertEqual(newObj!["stringCol"] as! String, "string")
+                    XCTAssertEqual(oldObj!["stringCol"] as! String, "string")
+                    self.assertThrows(oldObj!["noSuchCol"] as! String)
+                    self.assertThrows(newObj!["noSuchCol"] as! String)
                     count++
                 })
                 XCTAssertEqual(count, 1)
             })
         }
+
+        autoreleasepool {
+            Realm().write {
+                Realm().create(SwiftArrayPropertyObject.self, value: ["string", [["array"]], [[2]]])
+            }
+        }
+
+        autoreleasepool {
+            self.migrateAndTestRealm(Realm.defaultPath, schemaVersion: 3, block: { migration, oldSchemaVersion in
+                migration.enumerate("SwiftArrayPropertyObject") { oldObject, newObject in
+                    XCTAssertTrue(oldObject! as AnyObject is MigrationObject)
+                    XCTAssertTrue(newObject! as AnyObject is MigrationObject)
+                    XCTAssertTrue(oldObject!["array"]! is List<MigrationObject>)
+                    XCTAssertTrue(oldObject!["array"]! is List<MigrationObject>)
+                }
+            })
+        }
     }
 
     func testCreate() {
+        autoreleasepool {
+            _ = Realm()
+        }
+
         migrateAndTestRealm(Realm.defaultPath, block: { migration, oldSchemaVersion in
             migration.create("SwiftStringObject", value: ["string"])
             migration.create("SwiftStringObject", value: ["stringCol": "string"])
             migration.create("SwiftStringObject")
 
             self.assertThrows(migration.create("NoSuchObject", value: []))
-
-            var count = 0
-            migration.enumerate("SwiftStringObject", { oldObj, newObj in
-                if count == 0 {
-                    // first object has default value of empty string
-                    XCTAssertEqual(newObj!["stringCol"] as String, "")
-                }
-                else {
-                    XCTAssertEqual(newObj!["stringCol"] as String, "string")
-                    XCTAssertNil(oldObj, "Objects created during migration have nil oldObj")
-                }
-                count++
-            })
-            XCTAssertEqual(count, 3)
         })
 
-        XCTAssertEqual(Realm().objects(SwiftStringObject.self).count, 3)
+        let objects = Realm().objects(SwiftStringObject)
+        XCTAssertEqual(objects.count, 3)
+        XCTAssertEqual(objects[0].stringCol, "string")
+        XCTAssertEqual(objects[1].stringCol, "string")
+        XCTAssertEqual(objects[2].stringCol, "")
     }
 
     func testDelete() {
-        autoreleasepool { () -> () in
+        autoreleasepool {
             Realm().write {
                 Realm().create(SwiftStringObject.self, value: ["string1"])
                 Realm().create(SwiftStringObject.self, value: ["string2"])
@@ -214,7 +233,35 @@ class MigrationTests: TestCase {
             })
         })
 
-        XCTAssertEqual(Realm().objects(SwiftStringObject.self).count, 1)
+        XCTAssertEqual(Realm().objects(SwiftStringObject).count, 1)
+    }
+
+    func testDeleteData() {
+        autoreleasepool {
+            let realm = realmWithSingleClassProperties(testRealmPath(), "DeletedClass", [])
+            realm.transactionWithBlock {
+                realm.createObject("DeletedClass", withValue: [])
+            }
+        }
+
+        autoreleasepool {
+            setSchemaVersion(1, testRealmPath()) { migration, oldSchemaVersion in
+                XCTAssertEqual(oldSchemaVersion, 0, "Initial schema version should be 0");
+
+                XCTAssertTrue(migration.deleteData("DeletedClass"));
+                XCTAssertFalse(migration.deleteData("NoSuchClass"));
+
+                migration.create(SwiftStringObject.className(), value: ["migration"])
+                XCTAssertTrue(migration.deleteData(SwiftStringObject.className()));
+            }
+            migrateRealm(testRealmPath())
+        }
+
+        autoreleasepool {
+            let realm = dynamicRealm(testRealmPath())
+            XCTAssertNil(realm.schema.schemaForClassName("DeletedClass"))
+            XCTAssertEqual(0, realm.allObjects("SwiftStringObject").count)
+        }
     }
 
     // test getting/setting all property types
@@ -233,31 +280,31 @@ class MigrationTests: TestCase {
         self.migrateAndTestRealm(Realm.defaultPath, block: { migration, oldSchemaVersion in
             var enumerated = false
             migration.enumerate("SwiftObject", { oldObj, newObj in
-                XCTAssertEqual(oldObj!["boolCol"] as Bool, true)
-                XCTAssertEqual(newObj!["boolCol"] as Bool, true)
-                XCTAssertEqual(oldObj!["intCol"] as Int, 123)
-                XCTAssertEqual(newObj!["intCol"] as Int, 123)
-                XCTAssertEqual(oldObj!["floatCol"] as Float, 1.23 as Float)
-                XCTAssertEqual(newObj!["floatCol"] as Float, 1.23 as Float)
-                XCTAssertEqual(oldObj!["doubleCol"] as Double, 12.3 as Double)
-                XCTAssertEqual(newObj!["doubleCol"] as Double, 12.3 as Double)
+                XCTAssertEqual(oldObj!["boolCol"] as! Bool, true)
+                XCTAssertEqual(newObj!["boolCol"] as! Bool, true)
+                XCTAssertEqual(oldObj!["intCol"] as! Int, 123)
+                XCTAssertEqual(newObj!["intCol"] as! Int, 123)
+                XCTAssertEqual(oldObj!["floatCol"] as! Float, 1.23 as Float)
+                XCTAssertEqual(newObj!["floatCol"] as! Float, 1.23 as Float)
+                XCTAssertEqual(oldObj!["doubleCol"] as! Double, 12.3 as Double)
+                XCTAssertEqual(newObj!["doubleCol"] as! Double, 12.3 as Double)
 
                 var binaryCol = "a".dataUsingEncoding(NSUTF8StringEncoding)!
-                XCTAssertEqual(oldObj!["binaryCol"] as NSData, binaryCol)
-                XCTAssertEqual(newObj!["binaryCol"] as NSData, binaryCol)
+                XCTAssertEqual(oldObj!["binaryCol"] as! NSData, binaryCol)
+                XCTAssertEqual(newObj!["binaryCol"] as! NSData, binaryCol)
 
                 var dateCol = NSDate(timeIntervalSince1970: 1)
-                XCTAssertEqual(oldObj!["dateCol"] as NSDate, dateCol)
-                XCTAssertEqual(newObj!["dateCol"] as NSDate, dateCol)
+                XCTAssertEqual(oldObj!["dateCol"] as! NSDate, dateCol)
+                XCTAssertEqual(newObj!["dateCol"] as! NSDate, dateCol)
 
                 // FIXME - test that casting to SwiftBoolObject throws
-                XCTAssertEqual((oldObj!["objectCol"] as MigrationObject)["boolCol"] as Bool, true)
-                XCTAssertEqual((newObj!["objectCol"] as MigrationObject)["boolCol"] as Bool, true)
+                XCTAssertEqual((oldObj!["objectCol"] as! MigrationObject)["boolCol"] as! Bool, true)
+                XCTAssertEqual((newObj!["objectCol"] as! MigrationObject)["boolCol"] as! Bool, true)
 
-                XCTAssertEqual((oldObj!["arrayCol"] as List<MigrationObject>).count, 1)
-                XCTAssertEqual((oldObj!["arrayCol"] as List<MigrationObject>)[0]["boolCol"] as Bool, false)
-                XCTAssertEqual((newObj!["arrayCol"] as List<MigrationObject>).count, 1)
-                XCTAssertEqual((newObj!["arrayCol"] as List<MigrationObject>)[0]["boolCol"] as Bool, false)
+                XCTAssertEqual((oldObj!["arrayCol"] as! List<MigrationObject>).count, 1)
+                XCTAssertEqual((oldObj!["arrayCol"] as! List<MigrationObject>)[0]["boolCol"] as! Bool, false)
+                XCTAssertEqual((newObj!["arrayCol"] as! List<MigrationObject>).count, 1)
+                XCTAssertEqual((newObj!["arrayCol"] as! List<MigrationObject>)[0]["boolCol"] as! Bool, false)
 
                 // edit all values
                 newObj!["boolCol"] = false
@@ -270,19 +317,22 @@ class MigrationTests: TestCase {
                 let falseObj = SwiftBoolObject(value: [false])
                 newObj!["objectCol"] = falseObj
 
-                var list = newObj!["arrayCol"] as List<MigrationObject>
+                var list = newObj!["arrayCol"] as! List<MigrationObject>
                 list[0]["boolCol"] = true
-                list.append(newObj!["objectCol"] as MigrationObject)
+                list.append(newObj!["objectCol"] as! MigrationObject)
 
                 let trueObj = migration.create(SwiftBoolObject.className(), value: [true])
                 list.append(trueObj)
 
                 // verify list property
-                list = newObj!["arrayCol"] as List<MigrationObject>
+                list = newObj!["arrayCol"] as! List<MigrationObject>
                 XCTAssertEqual(list.count, 3)
-                XCTAssertEqual(list[0]["boolCol"] as Bool, true)
-                XCTAssertEqual(list[1]["boolCol"] as Bool, false)
-                XCTAssertEqual(list[2]["boolCol"] as Bool, true)
+                XCTAssertEqual(list[0]["boolCol"] as! Bool, true)
+                XCTAssertEqual(list[1]["boolCol"] as! Bool, false)
+                XCTAssertEqual(list[2]["boolCol"] as! Bool, true)
+
+                self.assertThrows(newObj!.valueForKey("noSuchKey"))
+                self.assertThrows(newObj!.setValue(1, forKey: "noSuchKey"))
 
                 // set it again
                 newObj!["arrayCol"] = [falseObj, trueObj]
@@ -296,7 +346,7 @@ class MigrationTests: TestCase {
         Realm().refresh()
 
         // check edited values
-        let object = Realm().objects(SwiftObject.self).first!
+        let object = Realm().objects(SwiftObject).first!
         XCTAssertEqual(object.boolCol, false)
         XCTAssertEqual(object.intCol, 1)
         XCTAssertEqual(object.floatCol, 1.0 as Float)

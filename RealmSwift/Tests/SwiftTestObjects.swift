@@ -31,6 +31,10 @@ class SwiftIntObject: Object {
     dynamic var intCol = 0
 }
 
+class SwiftLongObject: Object {
+    dynamic var longCol: Int64 = 0
+}
+
 class SwiftObject: Object {
     dynamic var boolCol = false
     dynamic var intCol = 123
@@ -84,9 +88,11 @@ class SwiftAggregateObject: Object {
     dynamic var boolCol = false
     dynamic var dateCol = NSDate()
     dynamic var trueCol = true
+    dynamic var stringListCol = List<SwiftStringObject>()
 }
 
 class SwiftAllIntSizesObject: Object {
+    dynamic var int8  : Int8  = 0
     dynamic var int16 : Int16 = 0
     dynamic var int32 : Int32 = 0
     dynamic var int64 : Int64 = 0
@@ -99,13 +105,21 @@ class SwiftEmployeeObject: Object {
 }
 
 class SwiftCompanyObject: Object {
-    let employees = List<SwiftEmployeeObject>()
+    dynamic var employees = List<SwiftEmployeeObject>()
 }
 
 class SwiftArrayPropertyObject: Object {
     dynamic var name = ""
     let array = List<SwiftStringObject>()
     let intArray = List<SwiftIntObject>()
+}
+
+class SwiftDoubleListOfSwiftObject: Object {
+    let array = List<SwiftListOfSwiftObject>()
+}
+
+class SwiftListOfSwiftObject: Object {
+    let array = List<SwiftObject>()
 }
 
 class SwiftArrayPropertySubclassObject: SwiftArrayPropertyObject {
@@ -146,7 +160,7 @@ class SwiftPrimaryStringObject: Object {
     dynamic var stringCol = ""
     dynamic var intCol = 0
 
-    override class func primaryKey() -> String {
+    override class func primaryKey() -> String? {
         return "stringCol"
     }
 }

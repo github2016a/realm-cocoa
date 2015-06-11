@@ -17,6 +17,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #import <XCTest/XCTest.h>
+#import "RLMAssertions.h"
 #import "RLMTestObjects.h"
 
 #ifdef __cplusplus
@@ -36,6 +37,7 @@ NSData *RLMGenerateKey(void);
 - (RLMRealm *)realmWithTestPathAndSchema:(RLMSchema *)schema;
 
 - (void)deleteFiles;
+- (void)deleteRealmFileAtPath:(NSString *)realmPath;
 
 - (void)waitForNotification:(NSString *)expectedNote realm:(RLMRealm *)realm block:(dispatch_block_t)block;
 

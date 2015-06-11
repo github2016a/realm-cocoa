@@ -69,7 +69,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
 
         let data = NSString(string: "abcd").dataUsingEncoding(NSUTF8StringEncoding)
 
-        let firstObj = SwiftObject.allObjectsInRealm(realm).firstObject() as SwiftObject
+        let firstObj = SwiftObject.allObjectsInRealm(realm).firstObject() as! SwiftObject
         XCTAssertEqual(firstObj.boolCol, true, "should be true")
         XCTAssertEqual(firstObj.intCol, 1234, "should be 1234")
         XCTAssertEqual(firstObj.floatCol, Float(1.1), "should be 1.1")
@@ -90,7 +90,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
 
         let data = NSString(string: "a").dataUsingEncoding(NSUTF8StringEncoding)
 
-        let firstObj = SwiftObject.allObjectsInRealm(realm).firstObject() as SwiftObject
+        let firstObj = SwiftObject.allObjectsInRealm(realm).firstObject() as! SwiftObject
         XCTAssertEqual(firstObj.boolCol, false, "should be false")
         XCTAssertEqual(firstObj.intCol, 123, "should be 123")
         XCTAssertEqual(firstObj.floatCol, Float(1.23), "should be 1.23")
@@ -105,10 +105,10 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
     func testMergedDefaultValuesSwiftObject() {
         let realm = self.realmWithTestPath()
         realm.beginWriteTransaction()
-        SwiftDefaultObject.createInRealm(realm, withObject: NSDictionary())
+        SwiftDefaultObject.createInRealm(realm, withValue: NSDictionary())
         realm.commitWriteTransaction()
 
-        let object = SwiftDefaultObject.allObjectsInRealm(realm).firstObject() as SwiftDefaultObject
+        let object = SwiftDefaultObject.allObjectsInRealm(realm).firstObject() as! SwiftDefaultObject
         XCTAssertEqual(object.intCol, 2, "defaultPropertyValues should override native property default value")
         XCTAssertEqual(object.boolCol, true, "native property default value should be used if defaultPropertyValues doesn't contain that key")
     }
@@ -120,9 +120,9 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
 
         let realm = RLMRealm.defaultRealm()
         realm.beginWriteTransaction()
-        SwiftStringObject.createInDefaultRealmWithObject(["string"])
+        SwiftStringObject.createInDefaultRealmWithValue(["string"])
 
-        let obj = SwiftStringObjectSubclass.createInDefaultRealmWithObject(["string", "string2"])
+        let obj = SwiftStringObjectSubclass.createInDefaultRealmWithValue(["string", "string2"])
         realm.commitWriteTransaction()
 
         // ensure creation in proper table
@@ -131,7 +131,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
 
         realm.transactionWithBlock { () -> Void in
             // create self referencing subclass
-            var sub = SwiftSelfRefrencingSubclass.createInDefaultRealmWithObject(["string", []])
+            var sub = SwiftSelfRefrencingSubclass.createInDefaultRealmWithValue(["string", []])
             var sub2 = SwiftSelfRefrencingSubclass()
             sub.objects.addObject(sub2)
         }
@@ -141,7 +141,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
         let realm = realmWithTestPath()
         realm.transactionWithBlock { realm.addObject(SwiftOptionalObject()) }
 
-        let firstObj = SwiftOptionalObject.allObjectsInRealm(realm).firstObject() as SwiftOptionalObject
+        let firstObj = SwiftOptionalObject.allObjectsInRealm(realm).firstObject() as! SwiftOptionalObject
         XCTAssertNil(firstObj.optObjectCol)
 
         realm.transactionWithBlock {
@@ -162,7 +162,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
     func testCustomAccessors() {
         let realm = realmWithTestPath()
         realm.beginWriteTransaction()
-        let ca = CustomAccessorsObject.createInRealm(realm, withObject: ["name", 2])
+        let ca = CustomAccessorsObject.createInRealm(realm, withValue: ["name", 2])
         XCTAssertEqual(ca.name!, "name", "name property should be name.")
         ca.age = 99
         XCTAssertEqual(ca.age, Int32(99), "age property should be 99")
@@ -179,7 +179,7 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
         realm.addObject(bObject)
         realm.commitWriteTransaction()
 
-        let objectFromRealm = BaseClassStringObject.allObjectsInRealm(realm)[0] as BaseClassStringObject
+        let objectFromRealm = BaseClassStringObject.allObjectsInRealm(realm)[0] as! BaseClassStringObject
         XCTAssertEqual(objectFromRealm.intCol, Int32(1), "Should be 1")
         XCTAssertEqual(objectFromRealm.stringCol!, "stringVal", "Should be stringVal")
     }
@@ -187,17 +187,17 @@ class SwiftObjectInterfaceTests: SwiftTestCase {
     func testCreateOrUpdate() {
         let realm = RLMRealm.defaultRealm()
         realm.beginWriteTransaction()
-        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithObject(["string", 1])
+        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithValue(["string", 1])
         let objects = SwiftPrimaryStringObject.allObjects();
         XCTAssertEqual(objects.count, UInt(1), "Should have 1 object");
-        XCTAssertEqual((objects[0] as SwiftPrimaryStringObject).intCol, 1, "Value should be 1");
+        XCTAssertEqual((objects[0] as! SwiftPrimaryStringObject).intCol, 1, "Value should be 1");
 
-        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithObject(["stringCol": "string2", "intCol": 2])
+        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithValue(["stringCol": "string2", "intCol": 2])
         XCTAssertEqual(objects.count, UInt(2), "Should have 2 objects")
 
-        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithObject(["string", 3])
+        SwiftPrimaryStringObject.createOrUpdateInDefaultRealmWithValue(["string", 3])
         XCTAssertEqual(objects.count, UInt(2), "Should have 2 objects")
-        XCTAssertEqual((objects[0] as SwiftPrimaryStringObject).intCol, 3, "Value should be 3");
+        XCTAssertEqual((objects[0] as! SwiftPrimaryStringObject).intCol, 3, "Value should be 3");
 
         realm.commitWriteTransaction()
     }

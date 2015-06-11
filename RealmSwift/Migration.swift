@@ -16,6 +16,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
+import Foundation
 import Realm
 import Realm.Private
 
@@ -27,7 +28,7 @@ Migration block used to migrate a Realm.
                          existing objects which require migration.
 :param: oldSchemaVersion The schema version of the `Realm` being migrated.
 */
-public typealias MigrationBlock = (migration: Migration, oldSchemaVersion: UInt) -> Void
+public typealias MigrationBlock = (migration: Migration, oldSchemaVersion: UInt64) -> Void
 
 /// Object class used during migrations
 public typealias MigrationObject = DynamicObject
@@ -67,7 +68,7 @@ block automatically as needed.
 :param: version The current schema version.
 :param: block   The block which migrates the Realm to the current version.
 */
-public func setDefaultRealmSchemaVersion(schemaVersion: UInt, migrationBlock: MigrationBlock) {
+public func setDefaultRealmSchemaVersion(schemaVersion: UInt64, migrationBlock: MigrationBlock) {
     RLMRealm.setDefaultRealmSchemaVersion(schemaVersion, withMigrationBlock: accessorMigrationBlock(migrationBlock))
 }
 
@@ -90,7 +91,7 @@ block automatically as needed.
 :param: realmPath The path of the Realms to migrate.
 :param: block     The block which migrates the Realm to the current version.
 */
-public func setSchemaVersion(schemaVersion: UInt, realmPath: String, migrationBlock: MigrationBlock) {
+public func setSchemaVersion(schemaVersion: UInt64, realmPath: String, migrationBlock: MigrationBlock) {
     RLMRealm.setSchemaVersion(schemaVersion, forRealmAtPath: realmPath, withMigrationBlock: accessorMigrationBlock(migrationBlock))
 }
 
@@ -103,7 +104,7 @@ Get the schema version for a Realm at a given path.
                       possible errors, omit the argument, or pass in `nil`.
 :returns: The version of the Realm at `realmPath` or `nil` if the version cannot be read.
 */
-public func schemaVersionAtPath(realmPath: String, encryptionKey: NSData? = nil, error: NSErrorPointer = nil) -> UInt? {
+public func schemaVersionAtPath(realmPath: String, encryptionKey: NSData? = nil, error: NSErrorPointer = nil) -> UInt64? {
     let version = RLMRealm.schemaVersionAtPath(realmPath, encryptionKey: encryptionKey, error: error)
     if version == RLMNotVersioned {
         return nil
@@ -162,7 +163,7 @@ public final class Migration {
     :param: className The name of the `Object` class to enumerate.
     :param: block     The block providing both the old and new versions of an object in this Realm.
     */
-    public func enumerate(objectClassName: String, block: MigrationObjectEnumerateBlock) {
+    public func enumerate(objectClassName: String, _ block: MigrationObjectEnumerateBlock) {
         rlmMigration.enumerateObjects(objectClassName) {
             block(oldObject: unsafeBitCast($0, MigrationObject.self), newObject: unsafeBitCast($1, MigrationObject.self))
         }
@@ -181,7 +182,7 @@ public final class Migration {
     :returns: The created object.
     */
     public func create(className: String, value: AnyObject = [:]) -> MigrationObject {
-        return unsafeBitCast(rlmMigration.createObject(className, withObject: value), MigrationObject.self)
+        return unsafeBitCast(rlmMigration.createObject(className, withValue: value), MigrationObject.self)
     }
 
     /**
@@ -192,6 +193,19 @@ public final class Migration {
     */
     public func delete(object: MigrationObject) {
         RLMDeleteObjectFromRealm(object, RLMObjectBaseRealm(object))
+    }
+
+    /**
+    Deletes the data for the class with the given name.
+    This deletes all objects of the given class, and if the Object subclass no longer exists in your program,
+    cleans up any remaining metadata for the class in the Realm file.
+
+    :param:   name The name of the Object class to delete.
+
+    :returns: whether there was any data to delete.
+    */
+    public func deleteData(objectClassName: String) -> Bool {
+        return rlmMigration.deleteDataForClassName(objectClassName)
     }
 
     private init(_ rlmMigration: RLMMigration) {
@@ -206,10 +220,18 @@ private func accessorMigrationBlock(migrationBlock: MigrationBlock) -> RLMMigrat
     return { migration, oldVersion in
         // set all accessor classes to MigrationObject
         for objectSchema in migration.oldSchema.objectSchema {
-            (objectSchema as RLMObjectSchema).accessorClass = MigrationObject.self
+            if let objectSchema = objectSchema as? RLMObjectSchema {
+                objectSchema.accessorClass = MigrationObject.self
+                // isSwiftClass is always `false` for object schema generated
+                // from the table, but we need to pretend it's from a swift class
+                // (even if it isn't) for the accessors to be initialized correctly.
+                objectSchema.isSwiftClass = true
+            }
         }
         for objectSchema in migration.newSchema.objectSchema {
-            (objectSchema as RLMObjectSchema).accessorClass = MigrationObject.self
+            if let objectSchema = objectSchema as? RLMObjectSchema {
+                objectSchema.accessorClass = MigrationObject.self
+            }
         }
 
         // run migration

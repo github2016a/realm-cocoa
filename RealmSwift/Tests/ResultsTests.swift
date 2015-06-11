@@ -70,12 +70,12 @@ class ResultsTests: TestCase {
         str2 = SwiftStringObject()
         str2.stringCol = "2"
 
-        let realm = realmWithTestPath()
+        let realm = self.realmWithTestPath()
         realm.beginWrite()
-        realm.add(str1)
-        realm.add(str2)
+        realm.add(self.str1)
+        realm.add(self.str2)
 
-        results = getResults()
+        self.results = self.getResults()
     }
 
     override func tearDown() {
@@ -121,9 +121,9 @@ class ResultsTests: TestCase {
     }
 
     func testIndexOfPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "stringCol = '2'")!
-        let pred3 = NSPredicate(format: "stringCol = '3'")!
+        let pred1 = NSPredicate(format: "stringCol = '1'")
+        let pred2 = NSPredicate(format: "stringCol = '2'")
+        let pred3 = NSPredicate(format: "stringCol = '3'")
 
         XCTAssertEqual(Int(0), results.indexOf(pred1)!)
         XCTAssertEqual(Int(1), results.indexOf(pred2)!)
@@ -141,8 +141,8 @@ class ResultsTests: TestCase {
         XCTAssertEqual(str1, results[0])
         XCTAssertEqual(str2, results[1])
 
-        assertThrows(results[200])
-        assertThrows(results[-200])
+        assertThrows(self.results[200])
+        assertThrows(self.results[-200])
     }
 
     func testFirst() {
@@ -159,10 +159,10 @@ class ResultsTests: TestCase {
 
     func testValueForKey() {
         let expected = map(results) { $0.stringCol }
-        let actual = results.valueForKey("stringCol") as [String]!
+        let actual = results.valueForKey("stringCol") as! [String]!
         XCTAssertEqual(expected, actual)
 
-        XCTAssertEqual(map(results) { $0 }, results.valueForKey("self") as [SwiftStringObject])
+        XCTAssertEqual(map(results) { $0 }, results.valueForKey("self") as! [SwiftStringObject])
     }
 
     func testSetValueForKey() {
@@ -179,10 +179,29 @@ class ResultsTests: TestCase {
         XCTAssertEqual(Int(0), results.filter("stringCol = %@", "3").count)
     }
 
+    func testFilterList() {
+        let outerArray = SwiftDoubleListOfSwiftObject()
+        let realm = realmWithTestPath()
+        let innerArray = SwiftListOfSwiftObject()
+        innerArray.array.append(SwiftObject())
+        outerArray.array.append(innerArray)
+        realm.add(outerArray)
+        XCTAssertEqual(Int(1), outerArray.array.filter("ANY array IN %@", realm.objects(SwiftObject)).count)
+    }
+
+    func testFilterResults() {
+        let array = SwiftListOfSwiftObject()
+        let realm = realmWithTestPath()
+        array.array.append(SwiftObject())
+        realm.add(array)
+        XCTAssertEqual(Int(1),
+            realm.objects(SwiftListOfSwiftObject).filter("ANY array IN %@", realm.objects(SwiftObject)).count)
+    }
+
     func testFilterPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "stringCol = '2'")!
-        let pred3 = NSPredicate(format: "stringCol = '3'")!
+        let pred1 = NSPredicate(format: "stringCol = '1'")
+        let pred2 = NSPredicate(format: "stringCol = '2'")
+        let pred3 = NSPredicate(format: "stringCol = '3'")
 
         XCTAssertEqual(Int(1), results.filter(pred1).count)
         XCTAssertEqual(Int(1), results.filter(pred2).count)
@@ -198,7 +217,7 @@ class ResultsTests: TestCase {
         XCTAssertEqual("2", sorted[0].stringCol)
         XCTAssertEqual("1", sorted[1].stringCol)
 
-        assertThrows(results.sorted("noSuchCol"))
+        assertThrows(self.results.sorted("noSuchCol"))
     }
 
     func testSortWithDescriptor() {
@@ -249,11 +268,11 @@ class ResultsTests: TestCase {
 
     func testAverage() {
         let results = getAggregateableResults()
-        XCTAssertEqual(Int(2), results.average("intCol") as Int)
-        XCTAssertEqualWithAccuracy(Float(1.8333), results.average("floatCol") as Float, 0.001)
-        XCTAssertEqualWithAccuracy(Double(1.85), results.average("doubleCol") as Double, 0.001)
+        XCTAssertEqual(Int(2), results.average("intCol") as Int!)
+        XCTAssertEqualWithAccuracy(Float(1.8333), results.average("floatCol") as Float!, 0.001)
+        XCTAssertEqualWithAccuracy(Double(1.85), results.average("doubleCol") as Double!, 0.001)
 
-        assertThrows(results.average("noSuchCol") as Float)
+        assertThrows(results.average("noSuchCol")! as Float)
     }
 
     func testFastEnumeration() {
@@ -264,27 +283,34 @@ class ResultsTests: TestCase {
 
         XCTAssertEqual(str, "12")
     }
+
+    func testArrayAggregateWithSwiftObjectDoesntThrow() {
+        let results = getAggregateableResults()
+
+        // Should not throw a type error.
+        results.filter("ANY stringListCol == %@", SwiftStringObject())
+    }
 }
 
 class ResultsFromTableTests: ResultsTests {
     override func getResults() -> Results<SwiftStringObject> {
-        return realmWithTestPath().objects(SwiftStringObject.self)
+        return realmWithTestPath().objects(SwiftStringObject)
     }
 
     override func getAggregateableResults() -> Results<SwiftAggregateObject> {
         makeAggregateableObjects()
-        return realmWithTestPath().objects(SwiftAggregateObject.self)
+        return realmWithTestPath().objects(SwiftAggregateObject)
     }
 }
 
 class ResultsFromTableViewTests: ResultsTests {
     override func getResults() -> Results<SwiftStringObject> {
-        return realmWithTestPath().objects(SwiftStringObject.self).filter("stringCol != ''")
+        return realmWithTestPath().objects(SwiftStringObject).filter("stringCol != ''")
     }
 
     override func getAggregateableResults() -> Results<SwiftAggregateObject> {
         makeAggregateableObjects()
-        return realmWithTestPath().objects(SwiftAggregateObject.self).filter("trueCol == true")
+        return realmWithTestPath().objects(SwiftAggregateObject).filter("trueCol == true")
     }
 }
 

@@ -23,16 +23,19 @@ import Foundation
 class RealmTests: TestCase {
     override func setUp() {
         super.setUp()
-        realmWithTestPath().write {
-            self.realmWithTestPath().create(SwiftStringObject.self, value: ["1"])
-            self.realmWithTestPath().create(SwiftStringObject.self, value: ["2"])
-            self.realmWithTestPath().create(SwiftStringObject.self, value: ["3"])
-        }
 
-        Realm().write {
-            Realm().create(SwiftIntObject.self, value: [100])
-            Realm().create(SwiftIntObject.self, value: [200])
-            Realm().create(SwiftIntObject.self, value: [300])
+        autoreleasepool {
+            self.realmWithTestPath().write {
+                self.realmWithTestPath().create(SwiftStringObject.self, value: ["1"])
+                self.realmWithTestPath().create(SwiftStringObject.self, value: ["2"])
+                self.realmWithTestPath().create(SwiftStringObject.self, value: ["3"])
+            }
+
+            Realm().write {
+                Realm().create(SwiftIntObject.self, value: [100])
+                Realm().create(SwiftIntObject.self, value: [200])
+                Realm().create(SwiftIntObject.self, value: [300])
+            }
         }
     }
 
@@ -158,6 +161,23 @@ class RealmTests: TestCase {
             XCTAssertEqual(Realm().objects(SwiftStringObject).count, 0)
         }
         XCTAssertEqual(Realm().objects(SwiftStringObject).count, 0)
+    }
+
+    func testInWriteTransaction() {
+        let realm = Realm()
+        XCTAssertFalse(realm.inWriteTransaction)
+        realm.beginWrite()
+        XCTAssertTrue(realm.inWriteTransaction)
+        realm.cancelWrite()
+        realm.write {
+            XCTAssertTrue(realm.inWriteTransaction)
+            realm.cancelWrite()
+            XCTAssertFalse(realm.inWriteTransaction)
+        }
+
+        realm.beginWrite()
+        realm.invalidate()
+        XCTAssertFalse(realm.inWriteTransaction)
     }
 
     func testAddSingleObject() {
@@ -321,7 +341,7 @@ class RealmTests: TestCase {
     func testObjects() {
         XCTAssertEqual(0, Realm().objects(SwiftStringObject).count)
         XCTAssertEqual(3, Realm().objects(SwiftIntObject).count)
-        XCTAssertEqual(3, Realm().objects(SwiftIntObject.self).count)
+        XCTAssertEqual(3, Realm().objects(SwiftIntObject).count)
         assertThrows(Realm().objects(Object))
     }
 
@@ -385,7 +405,7 @@ class RealmTests: TestCase {
         Realm().removeNotification(token)
 
         // get object
-        let results = Realm().objects(SwiftStringObject.self)
+        let results = Realm().objects(SwiftStringObject)
         XCTAssertEqual(results.count, Int(1), "There should be 1 object of type StringObject")
         XCTAssertEqual(results[0].stringCol, "string", "Value of first column should be 'string'")
     }
@@ -402,7 +422,7 @@ class RealmTests: TestCase {
             notificationFired.fulfill()
         }
 
-        let results = realm.objects(SwiftStringObject.self)
+        let results = realm.objects(SwiftStringObject)
         XCTAssertEqual(results.count, Int(0), "There should be 1 object of type StringObject")
 
         dispatch_async(dispatch_queue_create("background", nil)) {
@@ -450,7 +470,7 @@ class RealmTests: TestCase {
         XCTAssertNil(realm.writeCopyToPath(path))
         autoreleasepool {
             let copy = Realm(path: path)
-            XCTAssertEqual(1, copy.objects(SwiftObject.self).count)
+            XCTAssertEqual(1, copy.objects(SwiftObject).count)
         }
         NSFileManager.defaultManager().removeItemAtPath(path, error: nil)
     }

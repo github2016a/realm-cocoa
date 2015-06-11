@@ -16,6 +16,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
+import Foundation
 import Realm
 import Realm.Private
 
@@ -57,7 +58,7 @@ public final class Realm {
     /**
     The location of the default Realm as a string. Can be overridden.
 
-    `~/Application Support/{bundle ID}/default.realm` on OS X.
+    `~/Library/Application Support/{bundle ID}/default.realm` on OS X.
 
     `default.realm` in your application's documents directory on iOS.
 
@@ -208,6 +209,18 @@ public final class Realm {
         rlmRealm.cancelWriteTransaction()
     }
 
+    /**
+    Indicates if this Realm is currently in a write transaction.
+
+    :warning: Wrapping mutating operations in a write transaction if this property returns `false`
+              may cause a large number of write transactions to be created, which could negatively
+              impact Realm's performance. Always prefer performing multiple mutations in a single
+              transaction when possible.
+    */
+    public var inWriteTransaction: Bool {
+        return rlmRealm.inWriteTransaction
+    }
+
     // MARK: Adding and Creating objects
 
     /**
@@ -233,7 +246,7 @@ public final class Realm {
         if update && object.objectSchema.primaryKeyProperty == nil {
             throwRealmException("'\(object.objectSchema.className)' does not have a primary key and can not be updated")
         }
-        RLMAddObjectToRealm(object, rlmRealm, update ? .UpdateOrCreate : .allZeros)
+        RLMAddObjectToRealm(object, rlmRealm, update)
     }
 
     /**
@@ -276,8 +289,7 @@ public final class Realm {
         if update && schema[T.className()]?.primaryKeyProperty == nil {
           throwRealmException("'\(T.className())' does not have a primary key and can not be updated")
         }
-        let creationOptions: RLMCreationOptions = (update ? .UpdateOrCreate : .allZeros) | .AllowCopy
-        return unsafeBitCast(RLMCreateObjectInRealmWithValue(rlmRealm, T.className(), value, creationOptions), T.self)
+        return unsafeBitCast(RLMCreateObjectInRealmWithValue(rlmRealm, T.className(), value, update), T.self)
     }
 
     // MARK: Deleting objects

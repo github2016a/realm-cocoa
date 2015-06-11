@@ -29,6 +29,10 @@ class ListTests: TestCase {
         fatalError("abstract")
     }
 
+    func createArrayWithLinks() -> SwiftListOfSwiftObject {
+        fatalError("abstract")
+    }
+
     override func setUp() {
         super.setUp()
 
@@ -61,7 +65,7 @@ class ListTests: TestCase {
 
     override class func defaultTestSuite() -> XCTestSuite! {
         // Don't run tests for the base class
-        if self.isEqual(ListTests) {
+        if isEqual(ListTests) {
             return nil
         }
         return super.defaultTestSuite()
@@ -69,6 +73,15 @@ class ListTests: TestCase {
 
     func testDescription() {
         XCTAssertFalse(array.description.isEmpty)
+    }
+
+    func testInvalidated() {
+        XCTAssertFalse(array.invalidated)
+
+        if let realm = arrayObject.realm {
+            realm.delete(arrayObject)
+            XCTAssertTrue(array.invalidated)
+        }
     }
 
     func testCount() {
@@ -95,8 +108,8 @@ class ListTests: TestCase {
     }
 
     func testIndexOfPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "stringCol = '2'")!
+        let pred1 = NSPredicate(format: "stringCol = '1'")
+        let pred2 = NSPredicate(format: "stringCol = '2'")
 
         XCTAssertNil(array.indexOf(pred1))
         XCTAssertNil(array.indexOf(pred2))
@@ -129,14 +142,14 @@ class ListTests: TestCase {
 
         array[0] = str2
         XCTAssertEqual(str2, array[0])
-        assertThrows(array[-1] = str2)
+        assertThrows(self.array[-1] = self.str2)
 
         array.append(str1)
         XCTAssertEqual(str2, array[0])
         XCTAssertEqual(str1, array[1])
 
-        assertThrows(array[200])
-        assertThrows(array[-200])
+        assertThrows(self.array[200])
+        assertThrows(self.array[-200])
     }
 
     func testFirst() {
@@ -163,10 +176,10 @@ class ListTests: TestCase {
 
     func testValueForKey() {
         let expected = map(array) { $0.stringCol }
-        let actual = array.valueForKey("stringCol") as [String]!
+        let actual = array.valueForKey("stringCol") as! [String]!
         XCTAssertEqual(expected, actual)
 
-        XCTAssertEqual(map(array) { $0 }, array.valueForKey("self") as [SwiftStringObject])
+        XCTAssertEqual(map(array) { $0 }, array.valueForKey("self") as! [SwiftStringObject])
     }
 
     func testSetValueForKey() {
@@ -189,9 +202,35 @@ class ListTests: TestCase {
         XCTAssertEqual(Int(1), array.filter("stringCol = '2'").count)
     }
 
+    func testFilterList() {
+        let innerArray = createArrayWithLinks()
+
+        if let realm = innerArray.realm {
+            realm.beginWrite()
+            innerArray.array.append(SwiftObject())
+            let outerArray = SwiftDoubleListOfSwiftObject()
+            realm.add(outerArray)
+            outerArray.array.append(innerArray)
+            realm.commitWrite()
+            XCTAssertEqual(Int(1), outerArray.array.filter("ANY array IN %@", innerArray.array).count)
+        }
+    }
+
+    func testFilterResults() {
+        let arrayObject = createArrayWithLinks()
+
+        if let realm = arrayObject.realm {
+            realm.beginWrite()
+            arrayObject.array.append(SwiftObject())
+            let subArray = arrayObject.array
+            realm.commitWrite()
+            XCTAssertEqual(Int(1), realm.objects(SwiftListOfSwiftObject).filter("ANY array IN %@", subArray).count)
+        }
+    }
+
     func testFilterPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "stringCol = '2'")!
+        let pred1 = NSPredicate(format: "stringCol = '1'")
+        let pred2 = NSPredicate(format: "stringCol = '2'")
 
         XCTAssertEqual(Int(0), array.filter(pred1).count)
         XCTAssertEqual(Int(0), array.filter(pred2).count)
@@ -216,7 +255,7 @@ class ListTests: TestCase {
         XCTAssertEqual("2", sorted[0].stringCol)
         XCTAssertEqual("1", sorted[1].stringCol)
 
-        assertThrows(array.sorted("noSuchCol"))
+        assertThrows(self.array.sorted("noSuchCol"))
     }
 
     func testSortWithDescriptors() {
@@ -308,8 +347,8 @@ class ListTests: TestCase {
         XCTAssertEqual(str2, array[0])
         XCTAssertEqual(str1, array[1])
 
-        assertThrows(array.insert(str2, atIndex: 200))
-        assertThrows(array.insert(str2, atIndex: -200))
+        assertThrows(self.array.insert(self.str2, atIndex: 200))
+        assertThrows(self.array.insert(self.str2, atIndex: -200))
     }
 
     func testRemoveAtIndex() {
@@ -319,8 +358,8 @@ class ListTests: TestCase {
         XCTAssertEqual(str1, array[0])
         XCTAssertEqual(str1, array[1])
 
-        assertThrows(array.removeAtIndex(200))
-        assertThrows(array.removeAtIndex(-200))
+        assertThrows(self.array.removeAtIndex(200))
+        assertThrows(self.array.removeAtIndex(-200))
     }
 
     func testRemoveLast() {
@@ -360,8 +399,8 @@ class ListTests: TestCase {
         XCTAssertEqual(str2, array[0])
         XCTAssertEqual(str2, array[1])
 
-        assertThrows(array.replace(200, object: str2))
-        assertThrows(array.replace(-200, object: str2))
+        assertThrows(self.array.replace(200, object: self.str2))
+        assertThrows(self.array.replace(-200, object: self.str2))
     }
 
     func testChangesArePersisted() {
@@ -389,7 +428,25 @@ class ListTests: TestCase {
 
         // Make sure we can enumerate
         for obj in array {
-            XCTAssertTrue(countElements(obj.description) > 0, "Object should have description")
+            XCTAssertTrue(count(obj.description) > 0, "Object should have description")
+        }
+    }
+
+    func testEnumeratingListWithListProperties() {
+        let arrayObject = createArrayWithLinks()
+
+        arrayObject.realm?.beginWrite()
+        for _ in 0..<10 {
+            arrayObject.array.append(SwiftObject())
+        }
+        arrayObject.realm?.commitWrite()
+
+        XCTAssertEqual(10, arrayObject.array.count)
+
+        for object in arrayObject.array {
+            XCTAssertEqual(123, object.intCol)
+            XCTAssertEqual(false, object.objectCol.boolCol)
+            XCTAssertEqual(0, object.arrayCol.count)
         }
     }
 }
@@ -401,42 +458,35 @@ class ListStandaloneTests: ListTests {
         return array
     }
 
+    override func createArrayWithLinks() -> SwiftListOfSwiftObject {
+        let array = SwiftListOfSwiftObject()
+        XCTAssertNil(array.realm)
+        return array
+    }
+
     // MARK: Things not implemented in standalone
 
     override func testSortWithProperty() {
-        assertThrows(array.sorted("stringCol", ascending: true))
-        assertThrows(array.sorted("noSuchCol"))
+        assertThrows(self.array.sorted("stringCol", ascending: true))
+        assertThrows(self.array.sorted("noSuchCol"))
     }
 
     override func testSortWithDescriptors() {
-        assertThrows(array.sorted([SortDescriptor(property: "intCol", ascending: true)]))
-        assertThrows(array.sorted([SortDescriptor(property: "noSuchCol", ascending: true)]))
+        assertThrows(self.array.sorted([SortDescriptor(property: "intCol", ascending: true)]))
+        assertThrows(self.array.sorted([SortDescriptor(property: "noSuchCol", ascending: true)]))
     }
 
     override func testFilterFormat() {
-        assertThrows(array.filter("stringCol = '1'"))
-        assertThrows(array.filter("noSuchCol = '1'"))
+        assertThrows(self.array.filter("stringCol = '1'"))
+        assertThrows(self.array.filter("noSuchCol = '1'"))
     }
 
     override func testFilterPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "noSuchCol = '2'")!
+        let pred1 = NSPredicate(format: "stringCol = '1'")
+        let pred2 = NSPredicate(format: "noSuchCol = '2'")
 
-        assertThrows(array.filter(pred1))
-        assertThrows(array.filter(pred2))
-    }
-
-    override func testIndexOfFormat() {
-        assertThrows(array.indexOf("stringCol = %@", "1"))
-        assertThrows(array.indexOf("noSuchCol = %@", "1"))
-    }
-
-    override func testIndexOfPredicate() {
-        let pred1 = NSPredicate(format: "stringCol = '1'")!
-        let pred2 = NSPredicate(format: "noSuchCol = '2'")!
-
-        assertThrows(array.indexOf(pred1))
-        assertThrows(array.indexOf(pred2))
+        assertThrows(self.array.filter(pred1))
+        assertThrows(self.array.filter(pred2))
     }
 }
 
@@ -444,7 +494,16 @@ class ListNewlyAddedTests: ListTests {
     override func createArray() -> SwiftArrayPropertyObject {
         let array = SwiftArrayPropertyObject()
         array.name = "name"
-        let realm = self.realmWithTestPath()
+        let realm = realmWithTestPath()
+        realm.write { realm.add(array) }
+
+        XCTAssertNotNil(array.realm)
+        return array
+    }
+
+    override func createArrayWithLinks() -> SwiftListOfSwiftObject {
+        let array = SwiftListOfSwiftObject()
+        let realm = Realm()
         realm.write { realm.add(array) }
 
         XCTAssertNotNil(array.realm)
@@ -454,9 +513,19 @@ class ListNewlyAddedTests: ListTests {
 
 class ListNewlyCreatedTests: ListTests {
     override func createArray() -> SwiftArrayPropertyObject {
-        let realm = self.realmWithTestPath()
+        let realm = realmWithTestPath()
         realm.beginWrite()
         let array = realm.create(SwiftArrayPropertyObject.self, value: ["name", [], []])
+        realm.commitWrite()
+
+        XCTAssertNotNil(array.realm)
+        return array
+    }
+
+    override func createArrayWithLinks() -> SwiftListOfSwiftObject {
+        let realm = Realm()
+        realm.beginWrite()
+        let array = realm.create(SwiftListOfSwiftObject)
         realm.commitWrite()
 
         XCTAssertNotNil(array.realm)
@@ -466,11 +535,22 @@ class ListNewlyCreatedTests: ListTests {
 
 class ListRetrievedTests: ListTests {
     override func createArray() -> SwiftArrayPropertyObject {
-        let realm = self.realmWithTestPath()
+        let realm = realmWithTestPath()
         realm.beginWrite()
         realm.create(SwiftArrayPropertyObject.self, value: ["name", [], []])
         realm.commitWrite()
         let array = realm.objects(SwiftArrayPropertyObject).first!
+
+        XCTAssertNotNil(array.realm)
+        return array
+    }
+
+    override func createArrayWithLinks() -> SwiftListOfSwiftObject {
+        let realm = Realm()
+        realm.beginWrite()
+        realm.create(SwiftListOfSwiftObject)
+        realm.commitWrite()
+        let array = realm.objects(SwiftListOfSwiftObject).first!
 
         XCTAssertNotNil(array.realm)
         return array

@@ -16,13 +16,13 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
-import XCTest
-import RealmSwift
+import Foundation
 import Realm
 import Realm.Private
-import Foundation
+import RealmSwift
+import XCTest
 
-class TestCase: XCTestCase {
+class TestCase: RLMAutoreleasePoolTestCase {
     var exceptionThrown = false
 
     func realmWithTestPath() -> Realm {
@@ -34,14 +34,7 @@ class TestCase: XCTestCase {
         NSFileManager.defaultManager().createDirectoryAtPath(realmPathForFile(""), withIntermediateDirectories: true, attributes: nil, error: nil)
 
         exceptionThrown = false
-
-        autoreleasepool {
-            self.setUp()
-        }
-        autoreleasepool {
-            self.invocation.invoke()
-            self.tearDown()
-        }
+        super.invokeTest()
 
         if exceptionThrown {
             RLMDeallocateRealm(Realm.defaultPath)
@@ -55,9 +48,13 @@ class TestCase: XCTestCase {
         RLMRealm.resetRealmState()
     }
 
-    func assertThrows<T>(block: @autoclosure () -> T, _ message: String? = nil, fileName: String = __FILE__, lineNumber: UInt = __LINE__) {
+    func assertThrows<T>(@autoclosure(escaping) block: () -> T, _ message: String? = nil, fileName: String = __FILE__, lineNumber: UInt = __LINE__) {
         exceptionThrown = true
-        RLMAssertThrows(self, { _ = block() }, message, fileName, lineNumber);
+        RLMAssertThrows(self, { _ = block() } as dispatch_block_t, message, fileName, lineNumber)
+    }
+
+    func assertNil<T>(@autoclosure block: () -> T?, _ message: String? = nil, fileName: String = __FILE__, lineNumber: UInt = __LINE__) {
+        XCTAssert(block() == nil, message ?? "", file: fileName, line: lineNumber)
     }
 
     private func realmFilePrefix() -> String {

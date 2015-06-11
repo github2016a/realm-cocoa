@@ -16,6 +16,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
+import Foundation
 import Realm
 import Realm.Private
 
@@ -61,15 +62,14 @@ public final class List<T: Object>: ListBase {
         return Realm(_rlmArray.realm)
     }
 
+    /// Indicates if the list can no longer be accessed.
+    public var invalidated: Bool { return _rlmArray.invalidated }
+
     // MARK: Initializers
 
     /// Creates a `List` that holds objects of type `T`.
     public override init() {
         super.init(array: RLMArray(objectClassName: T.className()))
-    }
-
-    internal init(_ rlmArray: RLMArray) {
-        super.init(array: rlmArray)
     }
 
     // MARK: Index Retrieval
@@ -125,7 +125,7 @@ public final class List<T: Object>: ListBase {
     public subscript(index: Int) -> T {
         get {
             throwForNegativeIndex(index)
-            return _rlmArray[UInt(index)] as T
+            return _rlmArray[UInt(index)] as! T
         }
         set {
             throwForNegativeIndex(index)
@@ -134,10 +134,10 @@ public final class List<T: Object>: ListBase {
     }
 
     /// Returns the first object in the list, or `nil` if empty.
-    public var first: T? { return _rlmArray.firstObject() as T? }
+    public var first: T? { return _rlmArray.firstObject() as! T? }
 
     /// Returns the last object in the list, or `nil` if empty.
-    public var last: T? { return _rlmArray.lastObject() as T? }
+    public var last: T? { return _rlmArray.lastObject() as! T? }
 
     // MARK: KVC
 
@@ -310,7 +310,9 @@ extension List: ExtensibleCollectionType {
     public func generate() -> GeneratorOf<T> {
         let base = NSFastGenerator(_rlmArray)
         return GeneratorOf<T>() {
-            return base.next() as T?
+            let accessor = base.next() as! T?
+            RLMInitializeSwiftListAccessor(accessor)
+            return accessor
         }
     }
 

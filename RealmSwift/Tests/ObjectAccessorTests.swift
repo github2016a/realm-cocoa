@@ -74,7 +74,7 @@ class ObjectAccessorTests: TestCase {
     func testPersistedAccessors() {
         let object = SwiftObject()
         Realm().beginWrite()
-        Realm().create(SwiftObject.self)
+        Realm().create(SwiftObject)
         setAndTestAllProperties(object)
         Realm().commitWrite()
     }
@@ -82,6 +82,7 @@ class ObjectAccessorTests: TestCase {
     func testIntSizes() {
         let realm = realmWithTestPath()
 
+        let v8  = Int8(1)  << 6
         let v16 = Int16(1) << 12
         let v32 = Int32(1) << 30
         // 1 << 40 doesn't auto-promote to Int64 on 32-bit platforms
@@ -89,46 +90,119 @@ class ObjectAccessorTests: TestCase {
         realm.write {
             let obj = SwiftAllIntSizesObject()
 
-            obj.int16 = v16
-            XCTAssertEqual(obj.int16, v16)
-            obj.int32 = v32
-            XCTAssertEqual(obj.int32, v32)
-            obj.int64 = v64
-            XCTAssertEqual(obj.int64, v64)
+            let testObject: Void -> Void = {
+                obj.objectSchema.properties.map { $0.name }.map { obj[$0] = 0 }
+
+                obj["int8"] = Int(v8)
+                XCTAssertEqual(obj["int8"]! as! Int, Int(v8))
+                obj["int16"] = Int(v16)
+                XCTAssertEqual(obj["int16"]! as! Int, Int(v16))
+                obj["int32"] = Int(v32)
+                XCTAssertEqual(obj["int32"]! as! Int, Int(v32))
+                obj["int64"] = NSNumber(longLong: v64)
+                XCTAssertEqual(obj["int64"]! as! NSNumber, NSNumber(longLong: v64))
+
+                obj.objectSchema.properties.map { $0.name }.map { obj[$0] = 0 }
+
+                obj.setValue(Int(v8), forKey: "int8")
+                XCTAssertEqual(obj.valueForKey("int8")! as! Int, Int(v8))
+                obj.setValue(Int(v16), forKey: "int16")
+                XCTAssertEqual(obj.valueForKey("int16")! as! Int, Int(v16))
+                obj.setValue(Int(v32), forKey: "int32")
+                XCTAssertEqual(obj.valueForKey("int32")! as! Int, Int(v32))
+                obj.setValue(NSNumber(longLong: v64), forKey: "int64")
+                XCTAssertEqual(obj.valueForKey("int64")! as! NSNumber, NSNumber(longLong: v64))
+
+                obj.objectSchema.properties.map { $0.name }.map { obj[$0] = 0 }
+
+                obj.int8 = v8
+                XCTAssertEqual(obj.int8, v8)
+                obj.int16 = v16
+                XCTAssertEqual(obj.int16, v16)
+                obj.int32 = v32
+                XCTAssertEqual(obj.int32, v32)
+                obj.int64 = v64
+                XCTAssertEqual(obj.int64, v64)
+            }
+
+            testObject()
 
             realm.add(obj)
+
+            testObject()
         }
 
-        let obj = realm.objects(SwiftAllIntSizesObject.self).first!
+        let obj = realm.objects(SwiftAllIntSizesObject).first!
+        XCTAssertEqual(obj.int8, v8)
         XCTAssertEqual(obj.int16, v16)
         XCTAssertEqual(obj.int32, v32)
         XCTAssertEqual(obj.int64, v64)
     }
 
     func testLongType() {
-        let longNumber = 17179869184
-        let intNumber = 2147483647
-        let negativeLongNumber = -17179869184
-        let updatedLongNumber = 8589934592
+        let longNumber: Int64 = 17179869184
+        let intNumber: Int64 = 2147483647
+        let negativeLongNumber: Int64 = -17179869184
+        let updatedLongNumber: Int64 = 8589934592
 
         let realm = realmWithTestPath()
 
         realm.beginWrite()
-        realm.create(SwiftIntObject.self, value: [longNumber])
-        realm.create(SwiftIntObject.self, value: [intNumber])
-        realm.create(SwiftIntObject.self, value: [negativeLongNumber])
+        realm.create(SwiftLongObject.self, value: [NSNumber(longLong: longNumber)])
+        realm.create(SwiftLongObject.self, value: [NSNumber(longLong: intNumber)])
+        realm.create(SwiftLongObject.self, value: [NSNumber(longLong: negativeLongNumber)])
         realm.commitWrite()
 
-        let objects = realm.objects(SwiftIntObject.self)
+        let objects = realm.objects(SwiftLongObject)
         XCTAssertEqual(objects.count, Int(3), "3 rows expected")
-        XCTAssertEqual(objects[0].intCol, longNumber, "2 ^ 34 expected")
-        XCTAssertEqual(objects[1].intCol, intNumber, "2 ^ 31 - 1 expected")
-        XCTAssertEqual(objects[2].intCol, negativeLongNumber, "-2 ^ 34 expected")
+        XCTAssertEqual(objects[0].longCol, longNumber, "2 ^ 34 expected")
+        XCTAssertEqual(objects[1].longCol, intNumber, "2 ^ 31 - 1 expected")
+        XCTAssertEqual(objects[2].longCol, negativeLongNumber, "-2 ^ 34 expected")
 
         realm.beginWrite()
-        objects[0].intCol = updatedLongNumber
+        objects[0].longCol = updatedLongNumber
         realm.commitWrite()
 
-        XCTAssertEqual(objects[0].intCol, updatedLongNumber, "After update: 2 ^ 33 expected")
+        XCTAssertEqual(objects[0].longCol, updatedLongNumber, "After update: 2 ^ 33 expected")
+    }
+
+    func testListsDuringResultsFastEnumeration() {
+        let realm = realmWithTestPath()
+
+        let object1 = SwiftObject()
+        let object2 = SwiftObject()
+
+        let trueObject = SwiftBoolObject()
+        trueObject.boolCol = true
+
+        let falseObject = SwiftBoolObject()
+        falseObject.boolCol = false
+
+        object1.arrayCol.append(trueObject)
+        object1.arrayCol.append(falseObject)
+
+        object2.arrayCol.append(trueObject)
+        object2.arrayCol.append(falseObject)
+
+        realm.write {
+            realm.add(object1)
+            realm.add(object2)
+        }
+
+        let objects = realm.objects(SwiftObject)
+
+        let firstObject = objects.first
+        XCTAssertEqual(2, firstObject!.arrayCol.count)
+
+        let lastObject = objects.last
+        XCTAssertEqual(2, lastObject!.arrayCol.count)
+
+        var generator = objects.generate()
+        let next = generator.next()!
+        XCTAssertEqual(next.arrayCol.count, 2)
+
+        for obj in objects {
+            XCTAssertEqual(2, obj.arrayCol.count)
+        }
     }
 }

@@ -16,6 +16,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 
+import Foundation
 import Realm
 import Realm.Private
 
@@ -62,7 +63,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
 
     :see: Realm().add(_:)
     */
-    public override init() {
+    public required override init() {
         super.init()
     }
 
@@ -76,7 +77,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
                     thrown if any required properties are not present and no default is set.
     */
     public init(value: AnyObject) {
-        super.init(object: value, schema: RLMSchema.sharedSchema())
+        super.init(value: value, schema: RLMSchema.sharedSchema())
     }
 
 
@@ -109,7 +110,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
     Override to designate a property as the primary key for an `Object` subclass. Only properties of
     type String and Int can be designated as the primary key. Primary key
     properties enforce uniqueness for each value whenever the property is set which incurs some overhead.
-    Indexes are created automatically for string primary key properties.
+    Indexes are created automatically for primary key properties.
     :returns: Name of the property designated as the primary key, or `nil` if the model has no primary key.
     */
     public class func primaryKey() -> String? { return nil }
@@ -124,7 +125,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
 
     /**
     Return an array of property names for properties which should be indexed. Only supported
-    for string properties.
+    for string and int properties.
     :returns: `Array` of property names to index.
     */
     public class func indexedProperties() -> [String] { return [] }
@@ -140,7 +141,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
     :returns: An `Array` of objects of type `className` which have this object as their value for the `propertyName` property.
     */
     public func linkingObjects<T: Object>(type: T.Type, forProperty propertyName: String) -> [T] {
-        return RLMObjectBaseLinkingObjectsOfClass(self, T.className(), propertyName) as [T]
+        return RLMObjectBaseLinkingObjectsOfClass(self, T.className(), propertyName) as! [T]
     }
 
 
@@ -160,8 +161,8 @@ public class Object: RLMObjectBase, Equatable, Printable {
     WARNING: This is an internal initializer not intended for public use.
     :nodoc:
     */
-    public override init(object: AnyObject, schema: RLMSchema) {
-        super.init(object: object, schema: schema)
+    public override init(value: AnyObject, schema: RLMSchema) {
+        super.init(value: value, schema: schema)
     }
 
     /**
@@ -216,7 +217,7 @@ public class Object: RLMObjectBase, Equatable, Printable {
     private func listProperty(key: String) -> RLMListBase? {
         if let prop = RLMObjectBaseObjectSchema(self)?[key] {
             if prop.type == .Array {
-                return object_getIvar(self, prop.swiftListIvar) as RLMListBase?
+                return object_getIvar(self, prop.swiftListIvar) as! RLMListBase?
             }
         }
         return nil
@@ -250,23 +251,32 @@ public final class DynamicObject : Object {
         }
         return nil
     }
+
+    /// :nodoc:
+    public override func valueForUndefinedKey(key: String) -> AnyObject? {
+        return self[key]
+    }
+
+    /// :nodoc:
+    public override func setValue(value: AnyObject?, forUndefinedKey key: String) {
+        self[key] = value
+    }
+
+    @objc private class func shouldPersistToRealm() -> Bool {
+        return false;
+    }
 }
 
 /// :nodoc:
 /// Internal class. Do not use directly.
 public class ObjectUtil: NSObject {
-    @objc private class func primaryKeyForClass(type: AnyClass) -> NSString? {
-        if let type = type as? Object.Type {
-            return type.primaryKey()
-        }
-        return nil
-    }
     @objc private class func ignoredPropertiesForClass(type: AnyClass) -> NSArray? {
         if let type = type as? Object.Type {
             return type.ignoredProperties() as NSArray?
         }
         return nil
     }
+
     @objc private class func indexedPropertiesForClass(type: AnyClass) -> NSArray? {
         if let type = type as? Object.Type {
             return type.indexedProperties() as NSArray?
@@ -293,7 +303,7 @@ public class ObjectUtil: NSObject {
     }
 
     @objc private class func initializeListProperty(object: RLMObjectBase?, property: RLMProperty?, array: RLMArray?) {
-        let list = (object as Object)[property!.name]! as RLMListBase
+        let list = (object as! Object)[property!.name]! as! RLMListBase
         list._rlmArray = array
     }
 }

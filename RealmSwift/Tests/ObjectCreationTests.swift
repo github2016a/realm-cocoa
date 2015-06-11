@@ -116,18 +116,27 @@ class ObjectCreationTests: TestCase {
         verifySwiftObjectWithDictionaryLiteral(objectWithKVCObject, dictionary: valueDict, boolObjectValue: false, boolObjectListValues: [])
     }
 
+    func testGenericInit() {
+        func createObject<T: Object>() -> T {
+            return T()
+        }
+        let obj1: SwiftBoolObject = createObject()
+        let obj2 = SwiftBoolObject()
+        XCTAssertEqual(obj1.boolCol, obj2.boolCol, "object created via generic initializer should equal object created by calling initializer directly")
+    }
+
     // MARK: Creation tests
 
     func testCreateWithDefaults() {
         let realm = Realm()
-        assertThrows(realm.create(SwiftObject.self), "Must be in write transaction")
+        assertThrows(realm.create(SwiftObject), "Must be in write transaction")
 
         var object: SwiftObject!
         let objects = realm.objects(SwiftObject)
         XCTAssertEqual(0, objects.count)
         realm.write {
             // test create with all defaults
-            object = realm.create(SwiftObject.self)
+            object = realm.create(SwiftObject)
             return
         }
         verifySwiftObjectWithDictionaryLiteral(object, dictionary: SwiftObject.defaultValues(), boolObjectValue: false, boolObjectListValues: [])
@@ -237,24 +246,30 @@ class ObjectCreationTests: TestCase {
     }
 
     func testCreateWithNestedObjects() {
-        let standalone = SwiftPrimaryStringObject(value: ["primary", 11])
+        let standalone = SwiftPrimaryStringObject(value: ["p0", 11])
+
         Realm().beginWrite()
-        let objectWithNestedObjects = Realm().create(SwiftLinkToPrimaryStringObject.self, value: ["primary", ["primary", 11], [standalone]])
+        let objectWithNestedObjects = Realm().create(SwiftLinkToPrimaryStringObject.self, value: ["p1", ["p1", 11], [standalone]])
         Realm().commitWrite()
 
         let stringObjects = Realm().objects(SwiftPrimaryStringObject)
-        XCTAssertEqual(stringObjects.count, 1)
+        XCTAssertEqual(stringObjects.count, 2)
         let persistedObject = stringObjects.first!
 
         XCTAssertNotEqual(standalone, persistedObject) // standalone object should be copied into the realm, not added directly
         XCTAssertEqual(objectWithNestedObjects.object!, persistedObject)
-        XCTAssertEqual(objectWithNestedObjects.objects.first!, persistedObject)
+        XCTAssertEqual(objectWithNestedObjects.objects.first!, stringObjects.last!)
+
+        let standalone1 = SwiftPrimaryStringObject(value: ["p3", 11])
+        Realm().beginWrite()
+        assertThrows(Realm().create(SwiftLinkToPrimaryStringObject.self, value: ["p3", ["p3", 11], [standalone1]]), "Should throw with duplicate primary key")
+        Realm().commitWrite()
     }
 
     func testUpdateWithNestedObjects() {
         let standalone = SwiftPrimaryStringObject(value: ["primary", 11])
         Realm().beginWrite()
-        let object = Realm().create(SwiftLinkToPrimaryStringObject.self, value: ["otherPrimary", standalone, [["primary", 12]]], update: true)
+        let object = Realm().create(SwiftLinkToPrimaryStringObject.self, value: ["otherPrimary", ["primary", 12], [["primary", 12]]], update: true)
         Realm().commitWrite()
 
         let stringObjects = Realm().objects(SwiftPrimaryStringObject)
@@ -363,13 +378,13 @@ class ObjectCreationTests: TestCase {
 
     // MARK: Private utilities
     private func verifySwiftObjectWithArrayLiteral(object: SwiftObject, array: [AnyObject], boolObjectValue: Bool, boolObjectListValues: [Bool]) {
-        XCTAssertEqual(object.boolCol, array[0] as Bool)
-        XCTAssertEqual(object.intCol, array[1] as Int)
-        XCTAssertEqual(object.floatCol, array[2] as Float)
-        XCTAssertEqual(object.doubleCol, array[3] as Double)
-        XCTAssertEqual(object.stringCol, array[4] as String)
-        XCTAssertEqual(object.binaryCol, array[5] as NSData)
-        XCTAssertEqual(object.dateCol, array[6] as NSDate)
+        XCTAssertEqual(object.boolCol, array[0] as! Bool)
+        XCTAssertEqual(object.intCol, array[1] as! Int)
+        XCTAssertEqual(object.floatCol, array[2] as! Float)
+        XCTAssertEqual(object.doubleCol, array[3] as! Double)
+        XCTAssertEqual(object.stringCol, array[4] as! String)
+        XCTAssertEqual(object.binaryCol, array[5] as! NSData)
+        XCTAssertEqual(object.dateCol, array[6] as! NSDate)
         XCTAssertEqual(object.objectCol.boolCol, boolObjectValue)
         XCTAssertEqual(object.arrayCol.count, boolObjectListValues.count)
         for i in 0..<boolObjectListValues.count {
@@ -378,13 +393,13 @@ class ObjectCreationTests: TestCase {
     }
 
     private func verifySwiftObjectWithDictionaryLiteral(object: SwiftObject, dictionary: [String:AnyObject], boolObjectValue: Bool, boolObjectListValues: [Bool]) {
-        XCTAssertEqual(object.boolCol, dictionary["boolCol"] as Bool)
-        XCTAssertEqual(object.intCol, dictionary["intCol"] as Int)
-        XCTAssertEqual(object.floatCol, dictionary["floatCol"] as Float)
-        XCTAssertEqual(object.doubleCol, dictionary["doubleCol"] as Double)
-        XCTAssertEqual(object.stringCol, dictionary["stringCol"] as String)
-        XCTAssertEqual(object.binaryCol, dictionary["binaryCol"] as NSData)
-        XCTAssertEqual(object.dateCol, dictionary["dateCol"] as NSDate)
+        XCTAssertEqual(object.boolCol, dictionary["boolCol"] as! Bool)
+        XCTAssertEqual(object.intCol, dictionary["intCol"] as! Int)
+        XCTAssertEqual(object.floatCol, dictionary["floatCol"] as! Float)
+        XCTAssertEqual(object.doubleCol, dictionary["doubleCol"] as! Double)
+        XCTAssertEqual(object.stringCol, dictionary["stringCol"] as! String)
+        XCTAssertEqual(object.binaryCol, dictionary["binaryCol"] as! NSData)
+        XCTAssertEqual(object.dateCol, dictionary["dateCol"] as! NSDate)
         XCTAssertEqual(object.objectCol.boolCol, boolObjectValue)
         XCTAssertEqual(object.arrayCol.count, boolObjectListValues.count)
         for i in 0..<boolObjectListValues.count {
